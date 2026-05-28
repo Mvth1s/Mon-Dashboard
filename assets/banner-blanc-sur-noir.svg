@@ -1,0 +1,21 @@
+<svg width="1200" height="400" viewBox="0 0 1200 400" xmlns="http://www.w3.org/2000/svg" role="img"><title>Mon Dashboard</title>
+<rect width="1200" height="400" fill="#000000"/>
+<g transform="translate(250,200.0) scale(0.8301886792452831)">
+<path d="M-138,-128 C-138,-148 -120,-152 0,-152 C120,-152 138,-148 138,-128 L138,8 C138,72 96,108 0,166 C-96,108 -138,72 -138,8 Z" fill="none" stroke="#FFFFFF" stroke-width="11" stroke-linejoin="round"/>
+<g transform="translate(0,18)">
+<path d="M-80,0 A80,80 0 0 1 80,0" fill="none" stroke="#FFFFFF" stroke-width="10" stroke-linecap="round"/>
+<g stroke="#FFFFFF" stroke-width="6" stroke-linecap="round">
+<line x1="-80" y1="0" x2="-64" y2="0"/>
+<line x1="0" y1="-80" x2="0" y2="-64" transform="rotate(45 0 0)"/>
+<line x1="0" y1="-80" x2="0" y2="-64"/>
+<line x1="0" y1="-80" x2="0" y2="-64" transform="rotate(-45 0 0)"/>
+<line x1="80" y1="0" x2="64" y2="0"/>
+</g>
+<g transform="rotate(-50 0 0)"><path d="M0,0 L10,-11 L0,-66 L-10,-11 Z" fill="#FFFFFF"/></g>
+<circle cx="0" cy="0" r="13" fill="#FFFFFF"/>
+<circle cx="0" cy="0" r="5" fill="#000000"/>
+</g></g>
+<text x="470" y="195" font-family="Georgia, 'Times New Roman', serif" font-size="92" font-weight="700" letter-spacing="2" fill="#FFFFFF">MON</text>
+<text x="470" y="290" font-family="Georgia, 'Times New Roman', serif" font-size="92" font-weight="700" letter-spacing="2" fill="#FFFFFF">DASHBOARD</text>
+<text x="474" y="335" font-family="Arial, Helvetica, sans-serif" font-size="26" letter-spacing="8" fill="#BBBBBB">PERFORMANCE · MONITORING</text>
+</svg>
