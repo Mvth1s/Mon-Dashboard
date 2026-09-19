@@ -4,183 +4,211 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-MonDashboard is in early development (v0.1 in progress). The workspace and both crates
-build, and **every module is scaffolded but not implemented**: data structs and function
-signatures are complete, bodies are `todo!()` (37 of them across 27 files). Implementation
-work means filling in those bodies, not designing the types — the type layer is already the
-contract.
+v0.1 is **implemented and runs**: both crates build, the GTK window displays live data,
+and `cargo test` covers the collectors. `SPEC.md` (French) remains the reference for the
+full v0.1–v0.4 architecture — it describes far more than v0.1, so always check the scope
+list below before building something from it.
 
-`SPEC.md` (French) is the authoritative technical reference for the full planned
-architecture; it describes v0.1 through v0.4, so always cross-check it against the v0.1
-scope list below before building something.
-
-Not yet created, despite being described in SPEC.md: `flatpak/`, `data/` (desktop file,
-metainfo, hicolor icons), `LICENSE`.
+Exactly four `todo!()` remain, and all four are deliberately out of scope (see Scope):
+`alerts::check_alerts`, `process::kill_process`, `overlay::build`, `settings::build`.
 
 ## Commands
 
 ```bash
 cargo build                       # build all crates
-cargo build --release
 cargo run -p mondashboard-gtk     # run the app (binary is named `mondashboard`)
-cargo check --workspace           # fast feedback loop — preferred while filling in todo!()s
+cargo check --workspace           # fast feedback loop
 
 cargo test                        # all crates
 cargo test -p mondashboard-core   # single crate
 cargo test -p mondashboard-core <test_name>
 
+# Prints every piece of hardware detected on the current machine.
+# The fastest way to tell a detection bug from a display bug.
+cargo run -p mondashboard-core --example diagnostic
+
 # The `nvidia` feature is ON by default and pulls in nvml-wrapper.
-# Always verify the non-NVIDIA build too — gpu/nvidia.rs has two cfg-gated bodies:
+# gpu/nvidia.rs has two cfg-gated bodies, so always check the other one:
 cargo check -p mondashboard-core --no-default-features
 ```
 
-Rust **edition 2024** — requires a recent stable toolchain (developed on 1.95).
+**The pipeline** (`.github/workflows/ci.yml`, and what to run before merging a branch):
 
-**System dependencies required:**
-- GTK4 + libadwaita (`libgtk-4-dev`, `libadwaita-1-dev`)
-- `lm-sensors` for temperatures and fans
-- `smartmontools` for disk health (optional)
+```bash
+cargo fmt --all --check
+cargo clippy --workspace --all-targets -- -D warnings
+cargo clippy -p mondashboard-core --no-default-features -- -D warnings
+cargo test --workspace
+```
+
+Rust **edition 2024** — requires a recent stable toolchain (developed on 1.95; the
+`if let … && let …` chains in `layout/persistence.rs` need 1.88+).
+
+**System dependencies:** GTK4 + libadwaita (`libgtk-4-dev`, `libadwaita-1-dev`).
+`lm-sensors` and `smartmontools` are optional — their absence degrades gracefully.
+
+## The rule that shapes this codebase: detect, never assume
+
+Most of the collector code exists to avoid guessing about hardware. Respect this when
+touching anything under `mondashboard-core`:
+
+- **No sysfs index is ever hardcoded.** `hwmonN`, `cardN`, `BATn` and disk numbering change
+  between boots and do not correlate with each other (on the dev machine, `hwmon0` is the
+  sensor for `nvme1`, not `nvme0`). Enumerate, then identify by name or by resolving the
+  real device path with `sysfs::canonical`.
+- **An installed driver is not a present device.** `nvidia-smi` can exist on a machine with
+  an AMD GPU. `Nvml::init()` failing *is* the detection result: return an empty vec.
+- **Absent hardware is `None` or an empty list, never an error and never zero.** A driver
+  that does not publish GPU utilization (Intel i915/xe) must yield `None`, which the UI
+  renders as "—". Rendering it as 0 % would be a lie.
+- **A `type=Battery` device is not necessarily the computer's battery.** Wireless mice and
+  keyboards declare themselves as batteries with `scope=Device`; `battery.rs` filters on
+  that, and UPower's `PowerSupply` property serves the same purpose.
+- **External commands are localized.** `ping` prints `temps=` under a French locale, so it
+  is invoked with `LC_ALL=C`. Any new command parsing must do the same.
+
+Documented heuristics are acceptable where the kernel exposes no clean signal — the AMD
+integrated-vs-discrete split uses a VRAM threshold (`drm::IGPU_VRAM_LIMIT_BYTES`) and says
+so in a comment. Silent assumptions are not.
 
 ## Architecture
-
-Two-crate Cargo workspace with strict layer separation:
 
 ```
 mondashboard-core/   # Pure Rust library — system data collection, no GTK dependency
 mondashboard-gtk/    # GTK4 binary — UI only, consumes core via direct Rust calls
 ```
 
-The separation is a hard rule: nothing in `mondashboard-core` may reference GTK, and the
-frontend holds no collection logic. Core is consumed by direct Rust calls in the same
-process — no IPC, no channels.
+The separation is a hard rule: nothing in core references GTK, and the frontend holds no
+collection logic. Same process, direct Rust calls, no IPC.
 
-**Data flow:** the GTK frontend runs a polling loop via `glib::timeout_add_local` on the
-main GTK thread. Each tick calls core functions (`get_cpu_stats()`, …), updates widgets,
-then checks alert thresholds. No async channels or separate threads in v0.1 — core is
-non-blocking, so synchronous polling suffices.
+**Data flow:** `polling.rs` runs `glib::timeout_add_local` on the GTK main thread. Each
+tick refreshes `sysinfo`, calls the core collectors, and pushes the result into the
+widgets. `Collecteur` owns the state that must survive between ticks.
+
+**Nothing slow runs on that thread.** Three sources are too slow for a tick and each keeps
+its own background thread plus a cache, started once from `app.rs`:
+`network::start_ping_monitor`, `disk::start_smart_monitor`, `battery::start_monitor`.
+The getters return the cached value instantly. Anything new that shells out or talks
+D-Bus belongs in that pattern, not in a tick.
 
 **Differential collectors:** `get_network_stats(previous)` and `get_disk_stats(previous)`
-take the prior snapshot and derive per-second rates from the delta. The caller (the polling
-loop) owns those snapshots and must keep them across ticks.
+take the prior snapshot, which carries both the cumulative counters and a `sampled_at`
+`Instant`. Rates are computed over the real elapsed time, and a counter that went backwards
+(interface restarted) yields 0 rather than a nonsense spike.
 
-**`sysinfo::System` is caller-owned:** `get_cpu_stats(sys)`, `get_memory_stats(sys)` and
-`get_process_stats(sys)` borrow a `&System` that the frontend creates once and refreshes
-each tick — do not construct a new `System` inside a collector.
+**`sysinfo::System` is caller-owned** and passed by reference to `get_cpu_stats`,
+`get_memory_stats` and `get_process_stats` — never construct one inside a collector.
 
-**Async in a sync API:** core depends on `zbus` + `tokio` solely for battery (UPower over
-D-Bus). `get_battery_stats()` has a *synchronous* signature, so the async D-Bus call must be
-driven on a runtime internally and must not block the GTK main loop for long.
+**Battery has two interchangeable backends**, selected by `AppConfig::battery_source`:
+`Sysfs` (direct, instant), `UPower` (D-Bus, the Flatpak-friendly route, driven by a small
+dedicated tokio runtime), and `Auto`, which tries UPower and falls back to sysfs.
 
-**Configuration** is versioned JSON at
-`~/.var/app/io.github.Mvth1s.MonDashboard/config/config.json` (XDG path under Flatpak).
-Loaded at startup, saved on change. `AppConfig::version` exists for future migrations.
-Note `AppConfig` deliberately already carries fields beyond v0.1 scope (`layouts`, `alerts`,
-`overlay`) — keeping the schema stable now avoids a migration later. Serializing them is
-fine; building UI for them is not.
+**Configuration** is versioned JSON. Under Flatpak (`FLATPAK_ID` set) it lands at
+`$XDG_CONFIG_HOME/config.json`, i.e.
+`~/.var/app/io.github.Mvth1s.MonDashboard/config/config.json`; otherwise at
+`~/.config/mondashboard/config.json`. Any read failure falls back to defaults — the app
+must always start. `AppConfig` deliberately carries fields beyond v0.1 (`layouts`,
+`alerts`, `overlay`) so the schema stays stable; serializing them is fine, building UI for
+them is not.
 
 ### Core module pattern
 
-Every module in `mondashboard-core/src/` follows the same convention:
-- An immutable data struct (e.g. `CpuStats`), plus an `AllXxxStats { xxx: Vec<_> }` wrapper
-  for the multi-entity ones (gpu, disk, process, fans)
-- A pure collection function (e.g. `fn get_cpu_stats(sys: &sysinfo::System) -> CpuStats`)
-- Unit tests at the bottom of the file under `#[cfg(test)]`
+Each module in `mondashboard-core/src/` exposes an immutable data struct (`CpuStats`), an
+`AllXxxStats { … : Vec<_> }` wrapper for the multi-entity ones, a pure collection
+function, and `#[cfg(test)]` tests at the bottom. `sysfs.rs` holds the shared sysfs/procfs
+readers — use them rather than calling `std::fs` directly, since they already turn a
+missing file into `None`.
 
-Optional hardware data is `Option<T>` (temperatures, VRAM on iGPUs, cycle count…) rather
-than a sentinel value; widgets render "—" for `None`. Errors use
-`Result<T, MonDashboardError>` (in `lib.rs`, `thiserror`) — no `unwrap()` in production code.
+Tests must pass on a machine that has none of the hardware (the CI runner has no GPU, no
+battery, no fans): assert on invariants and on absence, not on values.
 
-Only `cpu.rs`, `memory.rs` and `network.rs` currently have `#[cfg(test)]` modules; add one
-when you implement any other module.
+Errors use `Result<T, MonDashboardError>` — no `unwrap()`/`expect()` in production code.
 
 ### GPU detection
 
-`gpu::get_gpu_stats()` delegates to `multi::collect_all()`, which calls each vendor
-backend's `pub(super) fn detect() -> Vec<GpuStats>` in order (nvidia, amd, amd_igpu, intel)
-and concatenates. A backend that finds no hardware returns an empty vec — it never errors.
-Multi-GPU (iGPU + discrete) is the expected case, not an edge case.
+`gpu::get_gpu_stats()` → `multi::collect_all()` calls each backend's
+`pub(super) fn detect() -> Vec<GpuStats>` in order (nvidia, amd, amd_igpu, intel) and
+concatenates. `drm.rs` does the shared `/sys/class/drm` enumeration and resolves the
+commercial name from the system's `pci.ids` when available. Multi-GPU is the expected case.
 
 ### GTK widget pattern
 
-All widgets in `mondashboard-gtk/src/widgets/` are plain structs wrapping a
-`container: gtk4::Box`, with the same inherent interface:
-- `fn new() -> Self`
-- `fn update(&self, data: &XxxStats)`
+Widgets in `mondashboard-gtk/src/widgets/` are structs wrapping `container: gtk4::Box`,
+with `fn new() -> Self` and `fn update(&self, data: &XxxStats)` (a convention, not a Rust
+trait). Shared helpers live in `widgets/mod.rs`: `carte()`, `ligne()`, `appliquer_niveau()`
+and the formatters — a widget should not format a byte count itself.
 
-(SPEC.md calls this a "trait commun"; in the code it is a convention, not an actual Rust
-trait — keep it that way unless there's a reason to change.)
+A widget whose hardware is absent calls `container.set_visible(false)`; the grid closes up
+around it. Rows whose count is only known at runtime (GPUs, disks, interfaces, fans) are
+rebuilt only when that count changes, never on every tick.
 
-Real-time graphs use `GtkDrawingArea` + Cairo with a 60-value circular buffer maintained in
-the frontend. SPEC.md describes that as "60s" because it was written against a 1s tick; at
-the v0.1 fixed 2s tick the same buffer spans 2 minutes.
+`graph.rs` is the Cairo graph: a 60-value circular buffer that fills right to left, fixed
+0–100 % or auto-scaled. At the 2 s tick, 60 points is two minutes of history (SPEC.md says
+"60 s" because it was written against a 1 s tick).
+
+## Conventions
+
+- **Comments, doc comments and commit messages are in French**, like `README.md` and
+  `SPEC.md`. Internal identifiers are French too (`carte`, `ligne`, `appliquer_niveau`).
+- **Public core API names stay English** — `CpuStats`, `get_cpu_stats`, the `SPEC.md`
+  contract. Do not rename them.
+- Comments explain *why*, especially every hardware quirk worked around. Those comments are
+  the reason the next reader does not reintroduce the bug.
+
+## Scope v0.1 (current target)
+
+Build ONLY what is listed. The ❌ items that already have stub files
+(`overlay.rs`, `settings.rs`, `alerts.rs`, `process::kill_process`) stay `todo!()`.
+
+✅ All 8 widgets (CPU, GPU, RAM, Network, Disk, Process, Battery, Fans)
+✅ Tray icon, left-click show/hide and a menu to quit
+✅ Auto dark/light theme via libadwaita
+✅ Fixed 2-column layout (no drag & drop)
+✅ Fixed 2 s refresh (`AppConfig::refresh_interval_secs` = 2; SPEC.md §4.2 says 1 s — 2 s wins)
+
+❌ Drag & drop, multiple layouts · Mini overlay · Notifications & alerts · Settings window · Kill process
 
 ## Flatpak
 
-App ID: `io.github.Mvth1s.MonDashboard`
-Runtime: `org.gnome.Platform` (v46+)
-Manifest: `flatpak/io.github.Mvth1s.MonDashboard.yml` — **not written yet**
+App ID `io.github.Mvth1s.MonDashboard`, manifest at
+`flatpak/io.github.Mvth1s.MonDashboard.yml`, runtime `org.gnome.Platform` 49.
 
 ```bash
 flatpak-builder --install --user build-dir flatpak/io.github.Mvth1s.MonDashboard.yml
 flatpak run io.github.Mvth1s.MonDashboard
 ```
 
-## Scope v0.1 (current target)
-
-Build ONLY what is listed below. Do not implement anything marked ❌ — several ❌ items
-already have stub files (`overlay.rs`, `settings.rs`, `layout/grid.rs`,
-`process::kill_process`, `alerts.rs`); leave those as `todo!()`.
-
-✅ IN SCOPE: All 8 widgets (CPU, GPU, RAM, Network, Disk, Process, Battery, Fans)
-✅ IN SCOPE: Tray icon with left-click show/hide and right-click quit
-✅ IN SCOPE: Auto dark/light theme via AdwStyleManager
-✅ IN SCOPE: Fixed layout (no drag & drop)
-✅ IN SCOPE: Fixed 2s refresh interval, no settings window
-   (`AppConfig::refresh_interval_secs` defaults to 2; SPEC.md §4.2 says 1s — 2s wins)
-
-❌ OUT OF SCOPE: Drag & drop, multiple layouts
-❌ OUT OF SCOPE: Mini overlay
-❌ OUT OF SCOPE: Notifications & alerts
-❌ OUT OF SCOPE: Settings window
-❌ OUT OF SCOPE: Kill process
-
-The battery widget must hide itself entirely when `BatteryStats::present` is false
-(desktops) — it is not an error state.
+The manifest builds with `--share=network` to fetch crates; a Flathub submission will need
+frozen sources from `flatpak-cargo-generator`. Inside the sandbox `smartctl` and `ping` are
+absent — SMART reports "indisponible" and the latency falls back to a TCP connect.
+**The Flatpak build has never been verified**: `flatpak-builder` was not installed on the
+development machine.
 
 ## UI Reference
 
-The HTML mockup is `MonDashboard _standalone_.html` at the repo root (note the spaces in
-the filename) — use it as visual reference when building GTK widgets: match the layout,
-color codes and widget structure. Logos and app icons are flat in `assets/` (there is no
-`assets/icons/` directory).
+The HTML mockup is `MonDashboard _standalone_.html` at the repo root (note the spaces).
+Logos and icons are flat in `assets/` (there is no `assets/icons/`).
 
-Color coding for metric indicators (fixed, never user-configurable, and distinct from alert
-thresholds):
-- Green  : load < 60%
-- Orange : load 60–85%
-- Red    : load > 85%
+Fixed metric colors, never user-configurable and distinct from alert thresholds:
+green < 60 %, orange 60–85 %, red > 85 %.
 
 ## Data sources per module
 
-| Module       | Source                                      |
+| Module | Source |
 |---|---|
-| cpu.rs       | `sysinfo` crate + `/sys/class/hwmon/` (temps) |
-| memory.rs    | `sysinfo` crate                             |
-| gpu/amd.rs   | `/sys/class/drm/` sysfs                     |
-| gpu/nvidia.rs| `nvml-wrapper` crate (feature-gated)        |
-| gpu/intel.rs | `/sys/class/drm/` sysfs                     |
-| gpu/multi.rs | aggregates all detected GPUs                |
-| network.rs   | `sysinfo` + differential snapshot for speed |
-| disk.rs      | `sysinfo` + `/proc/diskstats` differential  |
-| battery.rs   | UPower via D-Bus (`zbus` crate)             |
-| fans.rs      | `/sys/class/hwmon/` (fan*_input labels)     |
+| cpu.rs | `sysinfo` + hwmon by controller name (k10temp, zenpower, coretemp…) |
+| memory.rs | `sysinfo` + `/proc/meminfo` for the cache figure |
+| gpu/drm.rs | `/sys/class/drm` enumeration, shared by the AMD and Intel backends |
+| gpu/nvidia.rs | `nvml-wrapper` (feature-gated) |
+| network.rs | `sysinfo` + differential snapshot; `ping`, then TCP connect as fallback |
+| disk.rs | `sysinfo` + `/proc/diskstats` differential; `smartctl` in a background thread |
+| battery.rs | `/sys/class/power_supply` and/or UPower over D-Bus |
+| fans.rs | every hwmon's `fan*_input` / `fan*_label` |
 
-AMD GPU data is read directly from `sysfs` — deliberately no `rocm-smi` dependency, so
-users don't need it installed.
+AMD GPU data comes from sysfs on purpose — no `rocm-smi` dependency for users.
 
-## Conventions
+## Agents
 
-- Code, identifiers and code comments in **English**; user-facing docs (`README.md`,
-  `SPEC.md`) are in **French**. Keep new docs consistent with that split.
-- Doc comments on stub functions record their data source (e.g. `/// Sources:
-  /sys/class/hwmon/*/fan*_input and fan*_label.`) — preserve them when implementing.
+`.claude/agents/` holds three project agents: `collecteur-systeme` (collectors),
+`widget-gtk` (UI), and `revue-materiel`, a pre-merge reviewer that hunts hardware
+assumptions, panics and anything blocking the GTK loop.
