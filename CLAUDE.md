@@ -179,10 +179,21 @@ flatpak run io.github.Mvth1s.MonDashboard
 ```
 
 The manifest builds with `--share=network` to fetch crates; a Flathub submission will need
-frozen sources from `flatpak-cargo-generator`. Inside the sandbox `smartctl` and `ping` are
-absent — SMART reports "indisponible" and the latency falls back to a TCP connect.
-**The Flatpak build has never been verified**: `flatpak-builder` was not installed on the
-development machine.
+frozen sources from `flatpak-cargo-generator`. **The build has been verified**: it compiles,
+installs and runs.
+
+What the sandbox changes, all confirmed by running the packaged app — check these whenever
+you touch a collector, they are invisible in a native run:
+
+| Inside the sandbox | Consequence |
+|---|---|
+| PIDs are isolated | The app only sees its own processes. `ProcessWidget` says so instead of listing four internal threads. Flatpak always unshares the PID namespace, so there is no permission that fixes this. |
+| Mount points are the container's (`/usr`, `/app`) | `DiskWidget` titles rows by partition (`/dev/nvme0n1p2`) when `is_sandboxed()`. Only the volumes the sandbox can see are listed. |
+| `smartctl` is absent | SMART reports "indisponible". |
+| `ping` is absent | Latency falls back to a TCP connect (`network::ping_tcp`). |
+| `/sys` is readable | CPU/GPU/disk temperatures, fans and `pci.ids` name resolution all work normally. |
+
+`mondashboard_core::is_sandboxed()` is the check (`FLATPAK_ID` or `/.flatpak-info`).
 
 ## UI Reference
 
