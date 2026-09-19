@@ -1,0 +1,59 @@
+# Manifeste Flatpak de MonDashboard.
+#
+# Construction locale :
+#   flatpak-builder --install --user build-dir flatpak/io.github.Mvth1s.MonDashboard.yml
+#   flatpak run io.github.Mvth1s.MonDashboard
+#
+# Cette recette télécharge les dépendances Cargo pendant la construction
+# (--share=network). Pour une soumission sur Flathub, il faudra remplacer
+# cela par des sources figées, générées avec flatpak-cargo-generator.
+app-id: io.github.Mvth1s.MonDashboard
+runtime: org.gnome.Platform
+runtime-version: '49'
+sdk: org.gnome.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.rust-stable
+command: mondashboard
+
+finish-args:
+  - --share=ipc
+  - --socket=wayland
+  - --socket=fallback-x11
+  # Accélération graphique et lecture des compteurs de la carte via /sys/class/drm.
+  - --device=dri
+  # Mesure de latence réseau.
+  - --share=network
+  # Batterie : source UPower. Sans cette autorisation, la lecture sysfs prend le relais.
+  - --system-talk-name=org.freedesktop.UPower
+  # Icône de la zone de notification (StatusNotifierItem).
+  - --talk-name=org.kde.StatusNotifierWatcher
+  - --own-name=org.kde.StatusNotifierItem-2-1
+  - --talk-name=org.freedesktop.Notifications
+
+modules:
+  - name: mondashboard
+    buildsystem: simple
+    build-options:
+      append-path: /usr/lib/sdk/rust-stable/bin
+      build-args:
+        - --share=network
+      env:
+        CARGO_HOME: /run/build/mondashboard/cargo
+    build-commands:
+      - cargo build --release --locked
+      - install -Dm755 target/release/mondashboard /app/bin/mondashboard
+      - install -Dm644 data/io.github.Mvth1s.MonDashboard.desktop
+        /app/share/applications/io.github.Mvth1s.MonDashboard.desktop
+      - install -Dm644 data/io.github.Mvth1s.MonDashboard.metainfo.xml
+        /app/share/metainfo/io.github.Mvth1s.MonDashboard.metainfo.xml
+      - install -Dm644 assets/logo-transparent-traits-blancs.svg
+        /app/share/icons/hicolor/scalable/apps/io.github.Mvth1s.MonDashboard.svg
+      - install -Dm644 assets/icon-48.png
+        /app/share/icons/hicolor/48x48/apps/io.github.Mvth1s.MonDashboard.png
+      - install -Dm644 assets/icon-128.png
+        /app/share/icons/hicolor/128x128/apps/io.github.Mvth1s.MonDashboard.png
+      - install -Dm644 assets/icon-512.png
+        /app/share/icons/hicolor/512x512/apps/io.github.Mvth1s.MonDashboard.png
+    sources:
+      - type: dir
+        path: ..

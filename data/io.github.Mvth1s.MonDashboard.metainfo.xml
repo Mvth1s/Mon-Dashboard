@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.Mvth1s.MonDashboard</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+
+  <name>MonDashboard</name>
+  <summary>Tableau de bord système lisible au premier regard</summary>
+  <summary xml:lang="en">A system dashboard you can read at a glance</summary>
+
+  <description>
+    <p>
+      MonDashboard réunit en une seule fenêtre l'état du processeur, de la
+      carte graphique, de la mémoire, du réseau, du stockage, des processus,
+      de la batterie et du refroidissement.
+    </p>
+    <p>
+      Le matériel est détecté au lancement : les cartes sans matériel
+      correspondant disparaissent, et une information que le pilote ne publie
+      pas s'affiche comme indisponible plutôt que comme une valeur nulle.
+    </p>
+    <ul>
+      <li>Cartes graphiques AMD, NVIDIA et Intel, y compris les puces intégrées</li>
+      <li>Températures et ventilateurs issus des capteurs du noyau</li>
+      <li>Débits réseau et vitesses disque mesurés entre deux relevés</li>
+      <li>Thème clair ou sombre suivi automatiquement</li>
+    </ul>
+  </description>
+
+  <launchable type="desktop-id">io.github.Mvth1s.MonDashboard.desktop</launchable>
+
+  <developer id="io.github.mvth1s">
+    <name>Mvth1s</name>
+  </developer>
+
+  <url type="homepage">https://github.com/Mvth1s/Mon-Dashboard</url>
+  <url type="bugtracker">https://github.com/Mvth1s/Mon-Dashboard/issues</url>
+
+  <content_rating type="oars-1.1" />
+
+  <releases>
+    <release version="0.1.0" date="2026-09-19">
+      <description>
+        <p>Première version : les huit widgets, l'icône de notification et le thème adaptatif.</p>
+      </description>
+    </release>
+  </releases>
+</component>

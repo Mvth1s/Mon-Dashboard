@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Name=MonDashboard
+GenericName=Moniteur système
+GenericName[en]=System Monitor
+Comment=Surveillez processeur, carte graphique, mémoire, réseau et stockage
+Comment[en]=Monitor CPU, GPU, memory, network and storage
+Exec=mondashboard
+Icon=io.github.Mvth1s.MonDashboard
+Terminal=false
+Categories=System;Monitor;
+Keywords=système;moniteur;processeur;CPU;GPU;RAM;réseau;température;
+StartupNotify=true
+X-GNOME-UsesNotifications=true
