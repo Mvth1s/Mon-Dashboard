@@ -10,6 +10,10 @@ MonDashboard est une application de monitoring système pensée pour être **com
 
 _Captures d'écran à venir après la première release._
 
+> **État :** la v0.1 est fonctionnelle. Tous les widgets affichent des données
+> réelles, le matériel est détecté au lancement et l'application tourne en
+> arrière-plan derrière son icône de notification.
+
 ---
 
 ## Fonctionnalités
@@ -46,17 +50,37 @@ flatpak install flathub io.github.Mvth1s.MonDashboard
 - `smartmontools` pour la santé des disques *(optionnel)*
 
 ```bash
-git clone https://github.com/Mvth1s/MonDashboard.git
-cd MonDashboard
+git clone https://github.com/Mvth1s/Mon-Dashboard.git
+cd Mon-Dashboard
 cargo build --release
 ./target/release/mondashboard
 ```
+
+**Vérifier ce qui est détecté sur votre machine :**
+```bash
+cargo run -p mondashboard-core --example diagnostic
+```
+Cette commande affiche tout le matériel reconnu (processeur, cartes
+graphiques, disques, capteurs, batterie). C'est ce qu'il faut joindre à un
+rapport de bug.
 
 **Via Flatpak (local) :**
 ```bash
 flatpak-builder --install --user build-dir flatpak/io.github.Mvth1s.MonDashboard.yml
 flatpak run io.github.Mvth1s.MonDashboard
 ```
+
+---
+
+## Bon à savoir
+
+- **Icône de notification :** elle suit le protocole StatusNotifierItem, pris en
+  charge nativement par KDE Plasma. Sous GNOME, il faut l'extension
+  AppIndicator ; sans elle, l'application fonctionne normalement mais sans icône.
+- **Santé SMART :** `smartctl` exige en général les droits root. Sans eux,
+  l'état s'affiche « indisponible » — ce n'est pas une panne du disque.
+- **GPU Intel :** les pilotes i915 et xe ne publient pas le taux d'occupation
+  dans sysfs ; il s'affiche « — » plutôt qu'un 0 % trompeur.
 
 ---
 
@@ -97,7 +121,7 @@ Cette séparation garantit que la couche de collecte est testable indépendammen
 
 | Version | Objectif | Statut |
 |---|---|---|
-| v0.1 | MVP — tous les widgets, layout fixe, tray icon | 🚧 En cours |
+| v0.1 | MVP — tous les widgets, layout fixe, tray icon | ✅ Fonctionnelle |
 | v0.2 | Drag & drop, layouts multiples, paramètres | 📋 Planifié |
 | v0.3 | Mini overlay, alertes & notifications | 📋 Planifié |
 | v0.4 | Finitions, traductions, soumission Flathub | 📋 Planifié |
