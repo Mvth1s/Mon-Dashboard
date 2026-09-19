@@ -1,4 +1,4 @@
-use std::net::IpAddr;
+use std::net::{IpAddr, SocketAddr, TcpStream, ToSocketAddrs};
 use std::process::Command;
 use std::sync::{Mutex, OnceLock};
 use std::thread;
@@ -156,7 +156,14 @@ pub fn last_ping_ms() -> Option<f32> {
     ping_cache().lock().ok().and_then(|cache| *cache)
 }
 
+/// Port utilisé par la mesure de repli : HTTPS est ouvert partout.
+const PORT_REPLI: u16 = 443;
+
 fn run_ping(host: &str) -> Option<f32> {
+    ping_icmp(host).or_else(|| ping_tcp(host))
+}
+
+fn ping_icmp(host: &str) -> Option<f32> {
     let output = Command::new("ping")
         .args(["-c", "1", "-W", "2", "-n", host])
         // Sans cela, `ping` traduit sa sortie selon la langue du système
@@ -165,6 +172,17 @@ fn run_ping(host: &str) -> Option<f32> {
         .output()
         .ok()?;
     parse_ping(&String::from_utf8_lossy(&output.stdout))
+}
+
+/// Repli lorsque la commande `ping` est absente, ce qui est le cas dans le
+/// bac à sable Flatpak : on mesure le temps d'établissement d'une connexion
+/// TCP. La valeur est un peu supérieure à un ICMP (poignée de main en plus)
+/// mais reflète la même latence réseau.
+fn ping_tcp(host: &str) -> Option<f32> {
+    let adresse: SocketAddr = (host, PORT_REPLI).to_socket_addrs().ok()?.next()?;
+    let debut = Instant::now();
+    TcpStream::connect_timeout(&adresse, Duration::from_secs(2)).ok()?;
+    Some(debut.elapsed().as_secs_f32() * 1000.0)
 }
 
 /// Extrait la latence de la sortie de `ping`, au format « time=4.76 ms ».
@@ -199,6 +217,13 @@ mod tests {
     #[test]
     fn debit_calcule_sur_le_temps_ecoule() {
         assert_eq!(rate(3_000, Some(1_000), 2.0), 1_000);
+    }
+
+    #[test]
+    fn repli_tcp_sur_hote_injoignable() {
+        // Adresse réservée à la documentation : la connexion ne peut aboutir,
+        // et la mesure doit renvoyer None sans bloquer indéfiniment.
+        assert!(ping_tcp("192.0.2.1").is_none());
     }
 
     #[test]
