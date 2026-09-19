@@ -8,6 +8,7 @@ pub mod gpu;
 pub mod memory;
 pub mod network;
 pub mod process;
+pub mod sysfs;
 
 use thiserror::Error;
 

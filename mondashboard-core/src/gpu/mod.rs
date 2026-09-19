@@ -1,5 +1,6 @@
 mod amd;
 mod amd_igpu;
+mod drm;
 mod intel;
 mod multi;
 mod nvidia;

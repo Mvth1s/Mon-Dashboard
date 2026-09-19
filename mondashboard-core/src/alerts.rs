@@ -3,8 +3,7 @@ use std::time::Instant;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    cpu::CpuStats, disk::AllDiskStats, gpu::AllGpuStats, memory::MemoryStats,
-    network::NetworkStats,
+    cpu::CpuStats, disk::AllDiskStats, gpu::AllGpuStats, memory::MemoryStats, network::NetworkStats,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -41,14 +40,15 @@ pub struct AlertEvent {
     pub triggered_at: Instant,
 }
 
+/// Hors périmètre v0.1 (notifications & alertes) — voir CLAUDE.md.
 pub fn check_alerts(
-    config: &AlertConfig,
-    cpu: &CpuStats,
-    memory: &MemoryStats,
-    gpu: &AllGpuStats,
-    disks: &AllDiskStats,
-    network: &NetworkStats,
-    last_alerts: &[AlertEvent],
+    _config: &AlertConfig,
+    _cpu: &CpuStats,
+    _memory: &MemoryStats,
+    _gpu: &AllGpuStats,
+    _disks: &AllDiskStats,
+    _network: &NetworkStats,
+    _last_alerts: &[AlertEvent],
 ) -> Vec<AlertEvent> {
     todo!()
 }
