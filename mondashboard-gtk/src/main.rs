@@ -1,3 +1,12 @@
+mod app;
+mod layout;
+mod overlay;
+mod polling;
+mod settings;
+mod tray;
+mod widgets;
+
 fn main() {
-    println!("Hello, world!");
+    env_logger::init();
+    app::run();
 }

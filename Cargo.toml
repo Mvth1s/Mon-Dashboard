@@ -1,0 +1,6 @@
+[workspace]
+members = [
+    "mondashboard-core",
+    "mondashboard-gtk",
+]
+resolver = "2"
