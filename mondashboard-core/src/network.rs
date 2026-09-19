@@ -159,11 +159,22 @@ pub fn last_ping_ms() -> Option<f32> {
 fn run_ping(host: &str) -> Option<f32> {
     let output = Command::new("ping")
         .args(["-c", "1", "-W", "2", "-n", host])
+        // Sans cela, `ping` traduit sa sortie selon la langue du système
+        // (« temps= » en français) et la mesure devient introuvable.
+        .env("LC_ALL", "C")
         .output()
         .ok()?;
-    let text = String::from_utf8_lossy(&output.stdout);
-    let position = text.find("time=")?;
-    text[position + 5..].split_whitespace().next()?.parse().ok()
+    parse_ping(&String::from_utf8_lossy(&output.stdout))
+}
+
+/// Extrait la latence de la sortie de `ping`, au format « time=4.76 ms ».
+fn parse_ping(sortie: &str) -> Option<f32> {
+    let position = sortie.find("time=")?;
+    sortie[position + 5..]
+        .split_whitespace()
+        .next()?
+        .parse()
+        .ok()
 }
 
 #[cfg(test)]
@@ -188,6 +199,20 @@ mod tests {
     #[test]
     fn debit_calcule_sur_le_temps_ecoule() {
         assert_eq!(rate(3_000, Some(1_000), 2.0), 1_000);
+    }
+
+    #[test]
+    fn lecture_de_la_latence() {
+        let sortie = "64 bytes from 1.1.1.1: icmp_seq=1 ttl=56 time=4.76 ms";
+        assert_eq!(parse_ping(sortie), Some(4.76));
+    }
+
+    #[test]
+    fn sortie_traduite_ou_illisible_donne_none() {
+        // La locale C est imposée à l'appel ; si malgré tout la sortie change,
+        // on renvoie None plutôt qu'une valeur fausse.
+        assert_eq!(parse_ping("64 octets de 1.1.1.1 : temps=4.76 ms"), None);
+        assert_eq!(parse_ping(""), None);
     }
 
     #[test]
