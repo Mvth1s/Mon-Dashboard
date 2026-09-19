@@ -206,19 +206,29 @@ fn health(full_wh: f64, design_wh: f64) -> f32 {
 const UPOWER_TYPE_BATTERY: u32 = 2;
 
 fn from_upower() -> Option<BatteryStats> {
-    runtime().block_on(upower_query()).ok().flatten()
+    runtime()?.block_on(upower_query()).ok().flatten()
 }
 
 /// UPower est asynchrone alors que l'API de collecte est synchrone : on garde
 /// un petit runtime dédié, utilisé uniquement par le thread de surveillance.
-fn runtime() -> &'static tokio::runtime::Runtime {
-    static RUNTIME: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
-    RUNTIME.get_or_init(|| {
-        tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .expect("création du runtime tokio pour D-Bus")
-    })
+fn runtime() -> Option<&'static tokio::runtime::Runtime> {
+    static RUNTIME: OnceLock<Option<tokio::runtime::Runtime>> = OnceLock::new();
+    RUNTIME
+        .get_or_init(|| {
+            match tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+            {
+                Ok(runtime) => Some(runtime),
+                // Ne pas pouvoir créer le runtime prive d'UPower, ce qui est
+                // rattrapable par sysfs : cela ne doit pas arrêter l'application.
+                Err(erreur) => {
+                    log::warn!("runtime D-Bus indisponible, UPower ignoré : {erreur}");
+                    None
+                }
+            }
+        })
+        .as_ref()
 }
 
 async fn upower_query() -> zbus::Result<Option<BatteryStats>> {
