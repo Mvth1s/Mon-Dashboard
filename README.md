@@ -81,6 +81,12 @@ flatpak run io.github.Mvth1s.MonDashboard
   l'état s'affiche « indisponible » — ce n'est pas une panne du disque.
 - **GPU Intel :** les pilotes i915 et xe ne publient pas le taux d'occupation
   dans sysfs ; il s'affiche « — » plutôt qu'un 0 % trompeur.
+- **Version Flatpak :** le bac à sable masque les processus du système
+  (l'application ne voit qu'elle-même) et ne montre que les volumes auxquels
+  elle a accès, nommés par leur partition. Tout le reste — processeur, carte
+  graphique, mémoire, réseau, températures, ventilateurs — fonctionne
+  normalement. Pour la liste complète des processus, préférez la version
+  compilée depuis les sources.
 
 ---
 

@@ -12,6 +12,8 @@ const NOM_MAX: usize = 22;
 pub struct ProcessWidget {
     pub container: GtkBox,
     cellules: Vec<[Label; 4]>,
+    /// Sous Flatpak, les PID sont isolés : l'application ne voit qu'elle-même.
+    isole: bool,
 }
 
 impl ProcessWidget {
@@ -54,13 +56,35 @@ impl ProcessWidget {
 
         contenu.append(&grille);
 
+        // Flatpak place l'application dans son propre espace de PID : lister
+        // ses quelques processus internes ferait croire à un système au
+        // repos. On l'explique au lieu de mentir.
+        let isole = mondashboard_core::is_sandboxed();
+        if isole {
+            grille.set_visible(false);
+            let message = Label::builder()
+                .label(
+                    "Liste indisponible dans le bac à sable Flatpak :\n\
+                     les processus du système y sont masqués.",
+                )
+                .halign(Align::Start)
+                .wrap(true)
+                .css_classes(["secondaire"])
+                .build();
+            contenu.append(&message);
+        }
+
         Self {
             container,
             cellules,
+            isole,
         }
     }
 
     pub fn update(&self, data: &AllProcessStats) {
+        if self.isole {
+            return;
+        }
         for (rang, cellules) in self.cellules.iter().enumerate() {
             match data.processes.get(rang) {
                 Some(processus) => {

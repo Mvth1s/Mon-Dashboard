@@ -94,11 +94,19 @@ impl DiskWidget {
 fn maj_ligne(ligne: &LigneDisque, data: &DiskStats) {
     let occupation = ratio(data.used_gb, data.total_gb);
 
-    ligne.titre.set_label(&format!(
-        "{} — {}",
-        data.mount_point,
-        etiquette_type(&data.kind)
-    ));
+    // Dans un bac à sable, les points de montage sont ceux du conteneur
+    // (« /usr », « /app ») et n'ont plus de sens pour l'utilisateur ; le nom
+    // du périphérique, lui, reste exact.
+    let emplacement = if mondashboard_core::is_sandboxed() {
+        // `name` est la partition (« /dev/nvme0n1p2 »), qui distingue deux
+        // volumes d'un même disque, là où `device` les confondrait.
+        data.name.as_str()
+    } else {
+        data.mount_point.as_str()
+    };
+    ligne
+        .titre
+        .set_label(&format!("{} — {}", emplacement, etiquette_type(&data.kind)));
     ligne.barre.set_fraction((occupation / 100.0) as f64);
     appliquer_niveau(&ligne.barre, occupation);
     ligne.occupation.set_label(&format!(
