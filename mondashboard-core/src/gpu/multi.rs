@@ -1,4 +1,4 @@
-use super::{amd, amd_igpu, intel, nvidia, AllGpuStats};
+use super::{AllGpuStats, amd, amd_igpu, intel, nvidia};
 
 pub(super) fn collect_all() -> AllGpuStats {
     let mut gpus = vec![];
