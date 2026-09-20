@@ -114,8 +114,9 @@ fn icone_embarquee() -> Option<ksni::Icon> {
     }
 
     let mut argb = Vec::with_capacity(info.buffer_size());
-    for pixel in tampon[..info.buffer_size()].chunks_exact(4) {
-        argb.extend_from_slice(&[pixel[3], pixel[0], pixel[1], pixel[2]]);
+    let (pixels, _reste) = tampon[..info.buffer_size()].as_chunks::<4>();
+    for [rouge, vert, bleu, alpha] in pixels {
+        argb.extend_from_slice(&[*alpha, *rouge, *vert, *bleu]);
     }
 
     Some(ksni::Icon {
