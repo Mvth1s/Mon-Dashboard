@@ -152,9 +152,29 @@ ellipsized (`sous_titre()`, the process name) and why Adwaita's 150 px minimum w
 progress bars is overridden in CSS. Three cards fit around 1200 px, two around 800 px, one
 below that.
 
+**The level colors only apply to percentage scales.** An auto-scaled graph (network, disk)
+has no meaningful threshold, and its latest point is usually the observed maximum — colour
+it by "percent of max" and every small spike turns red. Auto-scaled graphs use the accent
+colour throughout.
+
 `graph.rs` is the Cairo graph: a 60-value circular buffer that fills right to left, fixed
 0–100 % or auto-scaled. At the 2 s tick, 60 points is two minutes of history (SPEC.md says
 "60 s" because it was written against a 1 s tick).
+
+### Window, icon and tray
+
+The window size is saved in `AppConfig::window` on close and on quit, and restored at
+startup: window managers do not agree on restoring it, and KWin's own memory silently
+overrides `default_width`.
+
+The app icon is compiled into the binary as a **GResource** (`resources/`, `build.rs`) and
+registered with `IconTheme::add_resource_path`, so the window and the About dialog show the
+real logo even when the app was never installed.
+
+The tray icon is sent **as a pixmap, with an empty `icon_name`**. A name the host cannot
+resolve in *its* theme (which our GResource does not reach) makes the panel draw a question
+mark rather than fall back to the pixmap. The embedded file is the white-on-transparent
+logo, which is what a panel expects.
 
 ## Conventions
 
@@ -171,7 +191,8 @@ Build ONLY what is listed. The ❌ items that already have stub files
 (`overlay.rs`, `settings.rs`, `alerts.rs`, `process::kill_process`) stay `todo!()`.
 
 ✅ All 8 widgets (CPU, GPU, RAM, Network, Disk, Process, Battery, Fans)
-✅ Tray icon, left-click show/hide and a menu to quit
+✅ Tray icon (left-click show/hide, menu to quit) and a header-bar menu with About,
+   Hide (Ctrl+W) and Quit (Ctrl+Q)
 ✅ Auto dark/light theme via libadwaita
 ✅ Adaptive layout, 1 to 3 cards per row depending on window width (no drag & drop)
 ✅ Fixed 2 s refresh (`AppConfig::refresh_interval_secs` = 2; SPEC.md §4.2 says 1 s — 2 s wins)
@@ -223,8 +244,8 @@ accent color is used instead of green, so the app matches the user's theme; `@AC
 | memory.rs | `sysinfo` + `/proc/meminfo` for the cache figure |
 | gpu/drm.rs | `/sys/class/drm` enumeration, shared by the AMD and Intel backends |
 | gpu/nvidia.rs | `nvml-wrapper` (feature-gated) |
-| network.rs | `sysinfo` + differential snapshot; `ping`, then TCP connect as fallback |
-| disk.rs | `sysinfo` + `/proc/diskstats` differential; `smartctl` in a background thread |
+| network.rs | `sysinfo` + differential snapshot; `ping`, then TCP connect as fallback. Idle virtual interfaces (docker, veth, virbr…) are filtered out |
+| disk.rs | `sysinfo` + `/proc/diskstats` differential; `smartctl` in a background thread. Temperature, SMART and throughput belong to the **physical disk**, so the widget groups volumes by `device` instead of repeating them per partition |
 | battery.rs | `/sys/class/power_supply` and/or UPower over D-Bus |
 | fans.rs | every hwmon's `fan*_input` / `fan*_label` |
 
@@ -249,3 +270,13 @@ assumptions, panics and anything blocking the GTK loop.
   message). Run `flatpak uninstall --user io.github.Mvth1s.MonDashboard` while iterating
   natively. Also note `pkill -f mondashboard` matches the shell command itself and kills
   the caller — use `pkill -x mondashboard`.
+
+## CI
+
+`runs-on` only selects the host VM — GitHub offers Ubuntu, Windows and macOS hosts only,
+so `ubuntu-latest` there is just the machine that runs Docker. The build itself happens
+entirely inside the `fedora:latest` container, which is what provides GTK4 and libadwaita.
+
+**The container's clippy is newer than a typical local one** and enforces lints the local
+toolchain does not know yet (it rejected `chunks_exact` with a constant size). A green
+local `cargo clippy` is therefore not proof; the CI run is the gate.
