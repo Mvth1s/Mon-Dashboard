@@ -5,7 +5,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use adw::prelude::*;
-use gtk4::{CssProvider, PolicyType, ScrolledWindow, gdk};
+use gtk4::{CssProvider, MenuButton, PolicyType, ScrolledWindow, gdk, gio};
 use mondashboard_core::{battery, disk, network};
 
 use crate::layout::{Tableau, load_config, save_config};
@@ -25,6 +25,9 @@ const PERIODE_TRAY: Duration = Duration::from_millis(150);
 const STYLE: &str = "
 .carte-widget { padding: 14px; }
 .titre-widget { font-weight: 700; font-size: 1.05em; }
+.icone-widget { -gtk-icon-size: 16px; opacity: 0.7; }
+/* Chiffres de même largeur : les valeurs ne se décalent plus à chaque tick. */
+.tabulaire { font-feature-settings: \"tnum\"; }
 .valeur-principale { font-size: 1.7em; font-weight: 700; }
 .valeur-secondaire { font-size: 0.95em; }
 .secondaire { opacity: 0.65; font-size: 0.9em; }
@@ -48,9 +51,27 @@ pub fn run() {
         .application_id(ID_APPLICATION)
         .build();
 
-    application.connect_startup(|_| charger_style());
+    application.connect_startup(|_| {
+        charger_style();
+        charger_icone();
+    });
     application.connect_activate(construire);
     application.run();
+}
+
+/// Rend l'icône embarquée visible sous son nom d'application, pour la
+/// fenêtre et la boîte « À propos », même sans installation dans le système.
+fn charger_icone() {
+    // Une icône manquante n'est pas une raison d'interrompre l'application.
+    if let Err(erreur) = gio::resources_register_include!("mondashboard.gresource") {
+        log::warn!("icône embarquée indisponible : {erreur}");
+        return;
+    }
+    if let Some(display) = gdk::Display::default() {
+        gtk4::IconTheme::for_display(&display)
+            .add_resource_path("/io/github/Mvth1s/MonDashboard/icons");
+    }
+    gtk4::Window::set_default_icon_name(ID_APPLICATION);
 }
 
 fn charger_style() {
@@ -119,6 +140,16 @@ fn construire(application: &adw::Application) {
         .build();
 
     let barre = adw::HeaderBar::new();
+    barre.pack_end(
+        &MenuButton::builder()
+            .icon_name("open-menu-symbolic")
+            .menu_model(&menu_principal())
+            .tooltip_text("Menu principal")
+            // Ouvre aussi au clavier avec F10, comme les applications GNOME.
+            .primary(true)
+            .build(),
+    );
+
     let vue = adw::ToolbarView::new();
     vue.add_top_bar(&barre);
     vue.set_content(Some(&defilement));
@@ -126,8 +157,8 @@ fn construire(application: &adw::Application) {
     let fenetre = adw::ApplicationWindow::builder()
         .application(application)
         .title("MonDashboard")
-        .default_width(1080)
-        .default_height(760)
+        .default_width(config.window.width)
+        .default_height(config.window.height)
         // Taille plancher volontairement basse : une seule colonne de cartes
         // reste lisible, par exemple à côté d'un jeu ou d'un éditeur.
         .width_request(360)
@@ -138,6 +169,7 @@ fn construire(application: &adw::Application) {
     // Fermer la fenêtre met l'application en arrière-plan : l'icône de la
     // zone de notification reste le moyen de la retrouver ou de quitter.
     fenetre.connect_close_request(|fenetre| {
+        retenir_geometrie(fenetre);
         fenetre.set_visible(false);
         glib::Propagation::Stop
     });
@@ -149,9 +181,76 @@ fn construire(application: &adw::Application) {
         config.ping_host.clone(),
     );
 
+    installer_actions(application, &fenetre);
     surveiller_tray(application, &fenetre, demandes);
 
     fenetre.present();
+}
+
+/// Enregistre la taille de la fenêtre pour la prochaine ouverture. La
+/// configuration est relue juste avant d'écrire, afin de ne rien perdre de ce
+/// qui aurait été modifié à la main entre-temps.
+fn retenir_geometrie(fenetre: &adw::ApplicationWindow) {
+    let (largeur, hauteur) = (fenetre.width(), fenetre.height());
+    if largeur <= 0 || hauteur <= 0 {
+        return;
+    }
+    let mut config = load_config();
+    if config.window.width == largeur && config.window.height == hauteur {
+        return;
+    }
+    config.window.width = largeur;
+    config.window.height = hauteur;
+    save_config(&config);
+}
+
+fn menu_principal() -> gio::Menu {
+    let menu = gio::Menu::new();
+    menu.append(Some("Masquer la fenêtre"), Some("app.masquer"));
+    menu.append(Some("À propos de MonDashboard"), Some("app.a-propos"));
+    menu.append(Some("Quitter"), Some("app.quitter"));
+    menu
+}
+
+/// Actions du menu et raccourcis clavier.
+fn installer_actions(application: &adw::Application, fenetre: &adw::ApplicationWindow) {
+    let a_propos = gio::SimpleAction::new("a-propos", None);
+    let parent = fenetre.clone();
+    a_propos.connect_activate(move |_, _| afficher_a_propos(&parent));
+    application.add_action(&a_propos);
+
+    let masquer = gio::SimpleAction::new("masquer", None);
+    let a_masquer = fenetre.clone();
+    masquer.connect_activate(move |_, _| a_masquer.set_visible(false));
+    application.add_action(&masquer);
+
+    let quitter = gio::SimpleAction::new("quitter", None);
+    let a_quitter = application.clone();
+    let avant_de_quitter = fenetre.clone();
+    quitter.connect_activate(move |_, _| {
+        retenir_geometrie(&avant_de_quitter);
+        a_quitter.quit();
+    });
+    application.add_action(&quitter);
+
+    // Ctrl+W masque sans quitter : l'application continue derrière son icône.
+    application.set_accels_for_action("app.masquer", &["<Control>w"]);
+    application.set_accels_for_action("app.quitter", &["<Control>q"]);
+}
+
+fn afficher_a_propos(parent: &adw::ApplicationWindow) {
+    adw::AboutDialog::builder()
+        .application_name("MonDashboard")
+        .application_icon(ID_APPLICATION)
+        .version(env!("CARGO_PKG_VERSION"))
+        .developer_name("Mvth1s")
+        .developers(vec!["Mvth1s".to_string()])
+        .license_type(gtk4::License::Gpl30)
+        .comments("Tableau de bord système lisible au premier regard.")
+        .website("https://github.com/Mvth1s/Mon-Dashboard")
+        .issue_url("https://github.com/Mvth1s/Mon-Dashboard/issues")
+        .build()
+        .present(Some(parent));
 }
 
 /// Relève les demandes de l'icône dans le thread graphique, seul autorisé à
@@ -166,6 +265,7 @@ fn surveiller_tray(
 
     glib::timeout_add_local(PERIODE_TRAY, move || {
         if demandes.prendre_quitter() {
+            retenir_geometrie(&fenetre);
             application.quit();
             return glib::ControlFlow::Break;
         }

@@ -16,7 +16,7 @@ pub struct FansWidget {
 
 impl FansWidget {
     pub fn new() -> Self {
-        let (container, contenu_carte) = carte("Refroidissement");
+        let (container, contenu_carte) = carte("Refroidissement", "weather-windy-symbolic");
 
         let contenu = GtkBox::builder()
             .orientation(Orientation::Vertical)
@@ -54,9 +54,13 @@ impl FansWidget {
                 ventilateur.label,
                 etiquette_type(&ventilateur.kind)
             ));
-            // 0 tr/min est une information utile : ventilateur à l'arrêt,
-            // mode silencieux ou courbe agressive.
-            valeur.set_label(&format!("{} tr/min", ventilateur.rpm));
+            // Un ventilateur arrêté est normal au repos : le dire évite de
+            // faire passer un mode silencieux pour une panne.
+            valeur.set_label(&if ventilateur.rpm == 0 {
+                "à l'arrêt".to_string()
+            } else {
+                format!("{} tr/min", ventilateur.rpm)
+            });
         }
 
         match data.coolant_temp_celsius {

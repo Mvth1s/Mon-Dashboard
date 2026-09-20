@@ -1,5 +1,6 @@
 //! Boucle de rafraîchissement : un tick collecte, puis met à jour l'affichage.
 
+use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::Duration;
 
@@ -60,14 +61,26 @@ impl Collecteur {
     }
 }
 
-/// Démarre la boucle. Un premier tick a lieu immédiatement pour que la
-/// fenêtre ne s'ouvre pas vide.
+/// Délai du premier relevé. `sysinfo` a besoin de deux mesures espacées pour
+/// donner un pourcentage d'occupation réaliste : afficher immédiatement
+/// montrerait 0 % partout, ce qui est faux.
+const PREMIER_RELEVE: Duration = Duration::from_millis(400);
+
+/// Démarre la boucle.
 pub fn start(tableau: Rc<Tableau>, tray: Rc<Tray>, intervalle: Duration, hote_ping: String) {
-    let mut collecteur = Collecteur::new(hote_ping);
-    collecteur.tick(&tableau, &tray);
+    let collecteur = Rc::new(RefCell::new(Collecteur::new(hote_ping)));
+
+    {
+        let collecteur = collecteur.clone();
+        let tableau = tableau.clone();
+        let tray = tray.clone();
+        glib::timeout_add_local_once(PREMIER_RELEVE, move || {
+            collecteur.borrow_mut().tick(&tableau, &tray);
+        });
+    }
 
     glib::timeout_add_local(intervalle, move || {
-        collecteur.tick(&tableau, &tray);
+        collecteur.borrow_mut().tick(&tableau, &tray);
         glib::ControlFlow::Continue
     });
 }

@@ -10,6 +10,13 @@ use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 use ksni::blocking::TrayMethods;
 
+/// Icône embarquée dans le binaire, en blanc sur fond transparent comme le
+/// veut une barre système. Le logo est fourni en image plutôt que par son nom
+/// car le thème du bureau ne contient celle de l'application qu'une fois le
+/// paquet installé : hors installation, l'hôte affichait un point
+/// d'interrogation.
+const ICONE: &[u8] = include_bytes!("../../assets/icon-transparent-blanc-192.png");
+
 /// Demandes de l'icône vers la fenêtre.
 #[derive(Default)]
 pub struct Demandes {
@@ -42,14 +49,24 @@ impl ksni::Tray for Icone {
         "MonDashboard".to_string()
     }
 
+    /// Volontairement vide : le protocole prévoit que l'hôte utilise alors
+    /// l'image de `icon_pixmap`. Renvoyer un nom absent du thème produisait
+    /// une icône « inconnue » au lieu du logo.
     fn icon_name(&self) -> String {
-        "utilities-system-monitor-symbolic".to_string()
+        String::new()
+    }
+
+    fn icon_pixmap(&self) -> Vec<ksni::Icon> {
+        icone_embarquee().into_iter().collect()
     }
 
     fn tool_tip(&self) -> ksni::ToolTip {
         ksni::ToolTip {
             title: "MonDashboard".to_string(),
-            description: format!("Processeur : {} %", self.charge_cpu.load(Ordering::Relaxed)),
+            description: format!(
+                "Processeur : {} %\nClic pour afficher ou masquer la fenêtre",
+                self.charge_cpu.load(Ordering::Relaxed)
+            ),
             ..Default::default()
         }
     }
@@ -81,6 +98,31 @@ impl ksni::Tray for Icone {
             .into(),
         ]
     }
+}
+
+/// Convertit le PNG embarqué au format attendu par le protocole : ARGB32 en
+/// ordre réseau, alors que PNG fournit du RGBA.
+fn icone_embarquee() -> Option<ksni::Icon> {
+    let mut lecture = png::Decoder::new(std::io::Cursor::new(ICONE))
+        .read_info()
+        .ok()?;
+    let mut tampon = vec![0; lecture.output_buffer_size()?];
+    let info = lecture.next_frame(&mut tampon).ok()?;
+    if info.color_type != png::ColorType::Rgba || info.bit_depth != png::BitDepth::Eight {
+        log::warn!("icône embarquée dans un format inattendu, icône du thème utilisée");
+        return None;
+    }
+
+    let mut argb = Vec::with_capacity(info.buffer_size());
+    for pixel in tampon[..info.buffer_size()].chunks_exact(4) {
+        argb.extend_from_slice(&[pixel[3], pixel[0], pixel[1], pixel[2]]);
+    }
+
+    Some(ksni::Icon {
+        width: info.width as i32,
+        height: info.height as i32,
+        data: argb,
+    })
 }
 
 pub struct Tray {

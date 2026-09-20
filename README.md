@@ -26,7 +26,10 @@ _Captures d'écran à venir après la première release._
 - **Processus** — top consommateurs CPU/RAM, recherche, kill de processus
 - **Batterie** — charge, santé, cycles, Wh, informations fabricant *(portables)*
 - **Ventilateurs** — RPM par capteur, pompe AIO, température liquide
-- **Tray icon** — tourne en arrière-plan, indicateur de charge dynamique
+- **Interface** — cartes réparties selon la largeur de la fenêtre, couleur
+  d'accentuation reprise du bureau, taille de fenêtre retenue d'une session
+  à l'autre, raccourcis `Ctrl+W` (masquer) et `Ctrl+Q` (quitter)
+- **Tray icon** — tourne en arrière-plan, infobulle avec la charge processeur
 - **Mini overlay** — fenêtre compacte always-on-top pour le gaming et l'IA locale *(v0.3)*
 - **Layouts multiples** — drag & drop, plusieurs configurations nommées *(v0.2)*
 - **Alertes** — notifications système configurables par seuil *(v0.3)*

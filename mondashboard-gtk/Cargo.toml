@@ -18,3 +18,7 @@ log = "0.4"
 env_logger = "0.11"
 notify-rust = "4"
 ksni = { version = "0.3.6", features = ["blocking"] }
+png = "0.18.1"
+
+[build-dependencies]
+glib-build-tools = "0.22.8"

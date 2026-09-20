@@ -22,6 +22,24 @@ pub enum TemperatureUnit {
     Fahrenheit,
 }
 
+/// Géométrie de la fenêtre, retenue d'une session à l'autre. Les
+/// gestionnaires de fenêtres ne la restaurent pas tous, et ceux qui le font
+/// ne s'accordent pas : l'application s'en charge elle-même.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WindowConfig {
+    pub width: i32,
+    pub height: i32,
+}
+
+impl Default for WindowConfig {
+    fn default() -> Self {
+        Self {
+            width: 1180,
+            height: 800,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct OverlayConfig {
     pub show_cpu: bool,
@@ -80,6 +98,8 @@ pub struct AppConfig {
     pub ping_host: String,
     #[serde(default)]
     pub battery_source: BatterySource,
+    #[serde(default)]
+    pub window: WindowConfig,
     pub alerts: AlertConfig,
     pub layouts: Vec<LayoutConfig>,
     pub active_layout: String,
@@ -94,6 +114,7 @@ impl Default for AppConfig {
             temperature_unit: TemperatureUnit::Celsius,
             ping_host: "1.1.1.1".to_string(),
             battery_source: BatterySource::default(),
+            window: WindowConfig::default(),
             alerts: AlertConfig::default(),
             layouts: vec![],
             active_layout: "Default".to_string(),
