@@ -11,14 +11,20 @@ env:
 
 jobs:
   build:
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v5
+    runs-on: ubuntu-latest
+    # Les images Ubuntu des runners ne fournissent que libadwaita 1.5, alors
+    # que la couleur d'accentuation du système exige la 1.6. On construit donc
+    # dans un conteneur Fedora, qui suit les versions de GNOME.
+    container: fedora:latest
 
+    steps:
       - name: Dépendances système (GTK4 + libadwaita)
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libgtk-4-dev libadwaita-1-dev
+          dnf install -y --setopt=install_weak_deps=False \
+            gcc pkgconf-pkg-config gtk4-devel libadwaita-devel \
+            git tar xz zstd findutils
+
+      - uses: actions/checkout@v5
 
       - uses: dtolnay/rust-toolchain@stable
         with:

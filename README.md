@@ -45,7 +45,9 @@ flatpak install flathub io.github.Mvth1s.MonDashboard
 
 **Prérequis :**
 - Rust stable (`rustup` recommandé)
-- GTK4 + libadwaita (`libgtk-4-dev`, `libadwaita-1-dev`)
+- GTK4 + **libadwaita 1.6 ou plus récent** (`libgtk-4-dev`, `libadwaita-1-dev`) —
+  la 1.6 est nécessaire pour reprendre la couleur d'accentuation du système ;
+  Ubuntu 24.04 n'en fournit que la 1.5, la version Flatpak n'est pas concernée
 - `lm-sensors` pour les températures et ventilateurs
 - `smartmontools` pour la santé des disques *(optionnel)*
 
