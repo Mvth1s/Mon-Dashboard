@@ -25,14 +25,14 @@ pub struct CpuWidget {
 
 impl CpuWidget {
     pub fn new() -> Self {
-        let (container, contenu) = carte("Processeur");
+        let (container, contenu) = carte("Processeur", "computer-symbolic");
 
         let modele = sous_titre();
         contenu.append(&modele);
 
         let charge = Label::builder()
             .halign(Align::Start)
-            .css_classes(["valeur-principale"])
+            .css_classes(["valeur-principale", "tabulaire"])
             .build();
         contenu.append(&charge);
 

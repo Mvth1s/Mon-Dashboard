@@ -18,11 +18,11 @@ pub struct MemoryWidget {
 
 impl MemoryWidget {
     pub fn new() -> Self {
-        let (container, contenu) = carte("Mémoire vive");
+        let (container, contenu) = carte("Mémoire vive", "media-flash-symbolic");
 
         let resume = Label::builder()
             .halign(Align::Start)
-            .css_classes(["valeur-principale"])
+            .css_classes(["valeur-principale", "tabulaire"])
             .build();
         contenu.append(&resume);
 

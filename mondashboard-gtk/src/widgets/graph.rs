@@ -98,12 +98,14 @@ fn dessiner(
         Echelle::Automatique => valeurs.iter().cloned().fold(1.0_f32, f32::max),
     } as f64;
 
-    let derniere = *valeurs.back().unwrap_or(&0.0) as f64;
-    let niveau = match echelle {
-        Echelle::Pourcentage => derniere,
-        Echelle::Automatique => derniere / maximum * 100.0,
+    // Sur une échelle automatique, le dernier point est souvent le maximum
+    // observé : le colorer par « pourcentage du maximum » peindrait en rouge
+    // le moindre pic de trafic. Seules les échelles en pourcentage, qui ont
+    // un vrai seuil, suivent le code couleur.
+    let (rouge, vert, bleu) = match echelle {
+        Echelle::Pourcentage => couleur(*valeurs.back().unwrap_or(&0.0) as f64),
+        Echelle::Automatique => super::couleur_accent(),
     };
-    let (rouge, vert, bleu) = couleur(niveau);
 
     let pas = largeur / (POINTS - 1) as f64;
     let depart = largeur - (valeurs.len().saturating_sub(1)) as f64 * pas;

@@ -4,29 +4,43 @@ use gtk4::prelude::*;
 use gtk4::{Align, Box as GtkBox, Label, Orientation, ProgressBar};
 use mondashboard_core::disk::{AllDiskStats, DiskKind, DiskStats, SmartHealth};
 
-use super::{appliquer_niveau, barre, carte, format_debit, format_temperature, ratio};
+use super::{appliquer_niveau, barre, carte, format_debit, format_temperature, ligne, ratio};
 
-struct LigneDisque {
+/// Un volume monté : c'est la seule information qui varie d'une partition à
+/// l'autre.
+struct LigneVolume {
     titre: Label,
     barre: ProgressBar,
     occupation: Label,
-    vitesses: Label,
+}
+
+/// Un disque physique et les volumes qu'il porte. Température, état SMART et
+/// vitesses appartiennent au disque : les répéter sous chaque partition
+/// laissait croire à des mesures distinctes alors qu'elles sont identiques.
+struct SectionDisque {
+    titre: Label,
     sante: Label,
+    vitesses: Label,
+    volumes: Vec<LigneVolume>,
 }
 
 pub struct DiskWidget {
     pub container: GtkBox,
     contenu: GtkBox,
-    lignes: RefCell<Vec<LigneDisque>>,
+    sections: RefCell<Vec<SectionDisque>>,
+    /// Disques et nombre de volumes de chacun : la reconstruction n'a lieu
+    /// que si ce découpage change (montage ou démontage d'un volume).
+    decoupage: RefCell<Vec<(String, usize)>>,
 }
 
 impl DiskWidget {
     pub fn new() -> Self {
-        let (container, contenu) = carte("Stockage");
+        let (container, contenu) = carte("Stockage", "drive-harddisk-symbolic");
         Self {
             container,
             contenu,
-            lignes: RefCell::new(Vec::new()),
+            sections: RefCell::new(Vec::new()),
+            decoupage: RefCell::new(Vec::new()),
         }
     }
 
@@ -37,94 +51,159 @@ impl DiskWidget {
         }
         self.container.set_visible(true);
 
-        if self.lignes.borrow().len() != data.disks.len() {
-            self.reconstruire(data.disks.len());
+        let groupes = grouper(data);
+        let decoupage: Vec<(String, usize)> = groupes
+            .iter()
+            .map(|(disque, volumes)| (disque.clone(), volumes.len()))
+            .collect();
+
+        if *self.decoupage.borrow() != decoupage {
+            self.reconstruire(&decoupage);
+            *self.decoupage.borrow_mut() = decoupage;
         }
 
-        for (ligne, disque) in self.lignes.borrow().iter().zip(&data.disks) {
-            maj_ligne(ligne, disque);
+        for (section, (_, volumes)) in self.sections.borrow().iter().zip(&groupes) {
+            maj_section(section, volumes);
         }
     }
 
-    fn reconstruire(&self, nombre: usize) {
+    fn reconstruire(&self, decoupage: &[(String, usize)]) {
         while let Some(enfant) = self.contenu.first_child() {
             self.contenu.remove(&enfant);
         }
-        let mut lignes = self.lignes.borrow_mut();
-        lignes.clear();
+        let mut sections = self.sections.borrow_mut();
+        sections.clear();
 
-        for _ in 0..nombre {
-            let racine = GtkBox::builder()
-                .orientation(Orientation::Vertical)
-                .spacing(3)
-                .build();
-            let titre = Label::builder().halign(Align::Start).build();
-            let barre_occupation = barre();
-            let occupation = Label::builder()
-                .halign(Align::Start)
-                .css_classes(["secondaire"])
-                .build();
-            let vitesses = Label::builder()
-                .halign(Align::Start)
-                .css_classes(["valeur-secondaire"])
-                .build();
-            let sante = Label::builder()
-                .halign(Align::Start)
-                .css_classes(["secondaire"])
-                .build();
-
-            racine.append(&titre);
-            racine.append(&barre_occupation);
-            racine.append(&occupation);
-            racine.append(&vitesses);
-            racine.append(&sante);
-            self.contenu.append(&racine);
-
-            lignes.push(LigneDisque {
-                titre,
-                barre: barre_occupation,
-                occupation,
-                vitesses,
-                sante,
-            });
+        for (index, (_, nombre_volumes)) in decoupage.iter().enumerate() {
+            if index > 0 {
+                self.contenu
+                    .append(&gtk4::Separator::new(Orientation::Horizontal));
+            }
+            sections.push(construire_section(&self.contenu, *nombre_volumes));
         }
     }
 }
 
-fn maj_ligne(ligne: &LigneDisque, data: &DiskStats) {
-    let occupation = ratio(data.used_gb, data.total_gb);
+/// Regroupe les volumes par disque physique, en conservant l'ordre
+/// d'apparition pour que l'affichage ne saute pas d'un tick à l'autre.
+fn grouper(data: &AllDiskStats) -> Vec<(String, Vec<&DiskStats>)> {
+    let mut groupes: Vec<(String, Vec<&DiskStats>)> = Vec::new();
+    for volume in &data.disks {
+        match groupes
+            .iter_mut()
+            .find(|(disque, _)| disque == &volume.device)
+        {
+            Some((_, volumes)) => volumes.push(volume),
+            None => groupes.push((volume.device.clone(), vec![volume])),
+        }
+    }
+    groupes
+}
 
-    // Dans un bac à sable, les points de montage sont ceux du conteneur
-    // (« /usr », « /app ») et n'ont plus de sens pour l'utilisateur ; le nom
-    // du périphérique, lui, reste exact.
-    let emplacement = if mondashboard_core::is_sandboxed() {
-        // `name` est la partition (« /dev/nvme0n1p2 »), qui distingue deux
-        // volumes d'un même disque, là où `device` les confondrait.
-        data.name.as_str()
-    } else {
-        data.mount_point.as_str()
+fn construire_section(parent: &GtkBox, nombre_volumes: usize) -> SectionDisque {
+    let racine = GtkBox::builder()
+        .orientation(Orientation::Vertical)
+        .spacing(4)
+        .build();
+
+    let entete = GtkBox::builder()
+        .orientation(Orientation::Horizontal)
+        .spacing(8)
+        .build();
+    let titre = Label::builder().halign(Align::Start).hexpand(true).build();
+    let sante = Label::builder()
+        .halign(Align::End)
+        .css_classes(["secondaire", "tabulaire"])
+        .build();
+    entete.append(&titre);
+    entete.append(&sante);
+    racine.append(&entete);
+
+    let (ligne_vitesses, vitesses) = ligne("Débit");
+    racine.append(&ligne_vitesses);
+
+    let mut volumes = Vec::with_capacity(nombre_volumes);
+    for _ in 0..nombre_volumes {
+        let bloc = GtkBox::builder()
+            .orientation(Orientation::Vertical)
+            .spacing(2)
+            .margin_top(4)
+            .build();
+        let titre_volume = Label::builder()
+            .halign(Align::Start)
+            .ellipsize(gtk4::pango::EllipsizeMode::Middle)
+            .max_width_chars(24)
+            .css_classes(["secondaire"])
+            .build();
+        let barre_volume = barre();
+        let occupation = Label::builder()
+            .halign(Align::Start)
+            .css_classes(["secondaire", "tabulaire"])
+            .build();
+
+        bloc.append(&titre_volume);
+        bloc.append(&barre_volume);
+        bloc.append(&occupation);
+        racine.append(&bloc);
+
+        volumes.push(LigneVolume {
+            titre: titre_volume,
+            barre: barre_volume,
+            occupation,
+        });
+    }
+
+    parent.append(&racine);
+    SectionDisque {
+        titre,
+        sante,
+        vitesses,
+        volumes,
+    }
+}
+
+fn maj_section(section: &SectionDisque, volumes: &[&DiskStats]) {
+    let Some(premier) = volumes.first() else {
+        return;
     };
-    ligne
-        .titre
-        .set_label(&format!("{} — {}", emplacement, etiquette_type(&data.kind)));
-    ligne.barre.set_fraction((occupation / 100.0) as f64);
-    appliquer_niveau(&ligne.barre, occupation);
-    ligne.occupation.set_label(&format!(
-        "{:.1} Go / {:.1} Go ({:.0} %)",
-        data.used_gb, data.total_gb, occupation
+
+    section.titre.set_label(&format!(
+        "{} — {}",
+        premier.device,
+        etiquette_type(&premier.kind)
     ));
-    // Les vitesses sont celles du disque physique : deux partitions d'un même
-    // disque affichent donc la même valeur.
-    ligne.vitesses.set_label(&format!(
-        "lecture {}   écriture {}",
-        format_debit(data.read_bytes_per_sec),
-        format_debit(data.write_bytes_per_sec)
+    section.sante.set_label(&format!(
+        "{} · {}",
+        format_temperature(premier.temperature_celsius),
+        etiquette_sante(&premier.smart_health)
     ));
-    ligne.sante.set_label(&format!(
-        "{}   SMART : {}",
-        format_temperature(data.temperature_celsius),
-        etiquette_sante(&data.smart_health)
+    // Les compteurs viennent du disque : une seule ligne, pas une par volume.
+    section.vitesses.set_label(&format!(
+        "↓ {}   ↑ {}",
+        format_debit(premier.read_bytes_per_sec),
+        format_debit(premier.write_bytes_per_sec)
     ));
+
+    for (ligne_volume, volume) in section.volumes.iter().zip(volumes) {
+        let occupation = ratio(volume.used_gb, volume.total_gb);
+        ligne_volume.titre.set_label(&emplacement(volume));
+        ligne_volume.barre.set_fraction((occupation / 100.0) as f64);
+        appliquer_niveau(&ligne_volume.barre, occupation);
+        ligne_volume.occupation.set_label(&format!(
+            "{:.1} Go / {:.1} Go ({:.0} %)",
+            volume.used_gb, volume.total_gb, occupation
+        ));
+    }
+}
+
+/// Dans un bac à sable, les points de montage sont ceux du conteneur
+/// (« /usr », « /app ») ; le nom de la partition, lui, reste exact.
+fn emplacement(volume: &DiskStats) -> String {
+    if mondashboard_core::is_sandboxed() {
+        volume.name.clone()
+    } else {
+        volume.mount_point.clone()
+    }
 }
 
 fn etiquette_type(kind: &DiskKind) -> &'static str {
@@ -138,12 +217,12 @@ fn etiquette_type(kind: &DiskKind) -> &'static str {
 
 fn etiquette_sante(sante: &SmartHealth) -> &'static str {
     match sante {
-        SmartHealth::Good => "bon état",
-        SmartHealth::Warning => "à surveiller",
-        SmartHealth::Critical => "critique",
+        SmartHealth::Good => "SMART bon",
+        SmartHealth::Warning => "SMART à surveiller",
+        SmartHealth::Critical => "SMART critique",
         // smartctl exige en général les droits root : l'information est
-        // simplement indisponible, ce n'est pas une panne.
-        SmartHealth::Unavailable => "indisponible",
+        // indisponible, ce n'est pas une panne.
+        SmartHealth::Unavailable => "SMART indisponible",
     }
 }
 

@@ -17,11 +17,11 @@ pub struct BatteryWidget {
 
 impl BatteryWidget {
     pub fn new() -> Self {
-        let (container, contenu) = carte("Batterie");
+        let (container, contenu) = carte("Batterie", "battery-symbolic");
 
         let niveau = Label::builder()
             .halign(Align::Start)
-            .css_classes(["valeur-principale"])
+            .css_classes(["valeur-principale", "tabulaire"])
             .build();
         contenu.append(&niveau);
 

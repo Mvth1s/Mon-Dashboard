@@ -58,6 +58,13 @@ pub fn get_network_stats(previous: &NetworkStats) -> NetworkStats {
 
         let rx_total_bytes = data.total_received();
         let tx_total_bytes = data.total_transmitted();
+
+        // Docker, les machines virtuelles et les VPN créent des interfaces
+        // qui encombrent la liste sans rien transporter. On ne les montre que
+        // si elles ont réellement servi.
+        if est_virtuelle(name) && rx_total_bytes == 0 && tx_total_bytes == 0 {
+            continue;
+        }
         let previous_interface = previous.interfaces.iter().find(|i| &i.name == name);
 
         interfaces.push(NetworkInterfaceStats {
@@ -87,6 +94,14 @@ pub fn get_network_stats(previous: &NetworkStats) -> NetworkStats {
         ping_host: previous.ping_host.clone(),
         sampled_at,
     }
+}
+
+/// Interfaces créées par un logiciel plutôt que par du matériel.
+fn est_virtuelle(nom: &str) -> bool {
+    const PREFIXES: &[&str] = &[
+        "docker", "veth", "br-", "virbr", "vmnet", "tap", "tun", "wg", "zt", "ham",
+    ];
+    PREFIXES.iter().any(|prefixe| nom.starts_with(prefixe))
 }
 
 /// Débit par seconde. Renvoie 0 au premier relevé ou si le compteur a été
@@ -198,6 +213,17 @@ fn parse_ping(sortie: &str) -> Option<f32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn interfaces_virtuelles_reconnues() {
+        assert!(est_virtuelle("docker0"));
+        assert!(est_virtuelle("virbr0"));
+        assert!(est_virtuelle("veth1a2b3c"));
+        assert!(!est_virtuelle("wlan0"));
+        assert!(!est_virtuelle("enp11s0"));
+        // Une interface sans fil ne doit pas être confondue avec un tunnel.
+        assert!(!est_virtuelle("wlp3s0"));
+    }
 
     #[test]
     fn hote_par_defaut() {

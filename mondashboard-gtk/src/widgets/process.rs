@@ -18,7 +18,7 @@ pub struct ProcessWidget {
 
 impl ProcessWidget {
     pub fn new() -> Self {
-        let (container, contenu) = carte("Processus");
+        let (container, contenu) = carte("Processus", "view-list-symbolic");
 
         let grille = Grid::builder().row_spacing(4).column_spacing(12).build();
         for (colonne, entete) in ["Nom", "CPU", "Mémoire", "Utilisateur"]

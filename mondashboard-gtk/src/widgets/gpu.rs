@@ -31,7 +31,7 @@ pub struct GpuWidget {
 
 impl GpuWidget {
     pub fn new() -> Self {
-        let (container, contenu) = carte("Carte graphique");
+        let (container, contenu) = carte("Carte graphique", "video-display-symbolic");
         Self {
             container,
             contenu,
@@ -88,7 +88,7 @@ fn construire_ligne() -> LigneGpu {
 
     let charge = Label::builder()
         .halign(Align::Start)
-        .css_classes(["valeur-principale"])
+        .css_classes(["valeur-principale", "tabulaire"])
         .build();
     racine.append(&charge);
 

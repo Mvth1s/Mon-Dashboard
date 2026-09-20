@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Icône embarquée dans le binaire. Sans elle, l'application n'affiche son
+  logo que là où le paquet a installé l'icône dans le thème du système :
+  lancée depuis les sources, la fenêtre et la boîte « À propos » tombaient
+  sur une image générique.
+-->
+<gresources>
+  <gresource prefix="/io/github/Mvth1s/MonDashboard/icons">
+    <file preprocess="xml-stripblanks">scalable/apps/io.github.Mvth1s.MonDashboard.svg</file>
+  </gresource>
+</gresources>

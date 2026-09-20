@@ -39,8 +39,9 @@ pub fn appliquer_niveau(widget: &impl IsA<gtk4::Widget>, pourcentage: f32) {
     widget.add_css_class(classe_niveau(pourcentage));
 }
 
-/// Carte d'un widget : un titre et une zone de contenu, au style libadwaita.
-pub fn carte(titre: &str) -> (GtkBox, GtkBox) {
+/// Carte d'un widget : une en-tête (icône + titre) et une zone de contenu,
+/// au style libadwaita.
+pub fn carte(titre: &str, icone: &str) -> (GtkBox, GtkBox) {
     let carte = GtkBox::builder()
         .orientation(Orientation::Vertical)
         .spacing(10)
@@ -51,12 +52,20 @@ pub fn carte(titre: &str) -> (GtkBox, GtkBox) {
     carte.add_css_class("card");
     carte.add_css_class("carte-widget");
 
+    let entete = GtkBox::builder()
+        .orientation(Orientation::Horizontal)
+        .spacing(8)
+        .build();
+    let image = gtk4::Image::from_icon_name(icone);
+    image.add_css_class("icone-widget");
     let titre = Label::builder()
         .label(titre)
         .halign(Align::Start)
         .css_classes(["titre-widget"])
         .build();
-    carte.append(&titre);
+    entete.append(&image);
+    entete.append(&titre);
+    carte.append(&entete);
 
     let contenu = GtkBox::builder()
         .orientation(Orientation::Vertical)
@@ -91,6 +100,9 @@ pub fn ligne(intitule: &str) -> (GtkBox, Label) {
         .xalign(0.0)
         .hexpand(true)
         .ellipsize(gtk4::pango::EllipsizeMode::End)
+        // Chiffres à chasse fixe : sans cela, une valeur qui passe de 9 à 10
+        // décale tout le texte à chaque seconde.
+        .css_classes(["tabulaire"])
         .build();
     ligne.append(&gauche);
     ligne.append(&valeur);

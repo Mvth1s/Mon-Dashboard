@@ -24,7 +24,7 @@ pub struct NetworkWidget {
 
 impl NetworkWidget {
     pub fn new() -> Self {
-        let (container, contenu) = carte("Réseau");
+        let (container, contenu) = carte("Réseau", "network-transmit-receive-symbolic");
 
         let graph = Graph::new(Echelle::Automatique);
         contenu.append(&graph.area);
