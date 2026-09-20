@@ -17,8 +17,11 @@ const ID_APPLICATION: &str = "io.github.Mvth1s.MonDashboard";
 /// paraisse instantané, assez long pour ne rien coûter.
 const PERIODE_TRAY: Duration = Duration::from_millis(150);
 
-/// Les couleurs de charge sont fixes ; tout le reste (fonds, textes) vient du
-/// thème libadwaita, qui suit automatiquement le mode clair ou sombre.
+/// Orange et rouge sont fixes : ils signalent un problème et doivent rester
+/// reconnaissables. En deçà de 60 %, `@ACCENT@` est remplacé au démarrage par
+/// la couleur d'accentuation du bureau, pour que l'application s'y accorde.
+/// Fonds et textes viennent du thème libadwaita, qui suit le mode clair ou
+/// sombre.
 const STYLE: &str = "
 .carte-widget { padding: 14px; }
 .titre-widget { font-weight: 700; font-size: 1.05em; }
@@ -26,13 +29,17 @@ const STYLE: &str = "
 .valeur-secondaire { font-size: 0.95em; }
 .secondaire { opacity: 0.65; font-size: 0.9em; }
 .interface-active { font-weight: 700; }
-.niveau-ok { color: #2ec27e; }
+.niveau-ok { color: @ACCENT@; }
 .niveau-moyen { color: #ff7800; }
 .niveau-critique { color: #e01b24; }
-progressbar.niveau-ok > trough > progress { background-color: #2ec27e; }
+progressbar.niveau-ok > trough > progress { background-color: @ACCENT@; }
 progressbar.niveau-moyen > trough > progress { background-color: #ff7800; }
 progressbar.niveau-critique > trough > progress { background-color: #e01b24; }
-progressbar.barre-coeur > trough, progressbar.barre-coeur > trough > progress { min-height: 6px; }
+/* Adwaita impose 150px de large à chaque barre : huit barres par cœur
+   rendaient la carte si large qu'une seule tenait par ligne, et la fenêtre
+   ne pouvait plus être rétrécie. */
+progressbar > trough, progressbar > trough > progress { min-width: 0; }
+progressbar.barre-coeur > trough, progressbar.barre-coeur > trough > progress { min-height: 6px; min-width: 14px; }
 progressbar.barre-fine > trough, progressbar.barre-fine > trough > progress { min-height: 4px; }
 ";
 
@@ -52,12 +59,31 @@ fn charger_style() {
         return;
     };
     let fournisseur = CssProvider::new();
-    fournisseur.load_from_string(STYLE);
+    fournisseur.load_from_string(&style_accentue());
     gtk4::style_context_add_provider_for_display(
         &display,
         &fournisseur,
         gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
     );
+
+    // L'utilisateur peut changer la couleur d'accentuation sans redémarrer :
+    // on recharge la feuille de style à la volée.
+    adw::StyleManager::default().connect_accent_color_notify(move |_| {
+        fournisseur.load_from_string(&style_accentue());
+    });
+}
+
+/// Injecte la couleur d'accentuation du système dans la feuille de style.
+/// libadwaita la lit du portail XDG, ce qui couvre GNOME comme KDE.
+fn style_accentue() -> String {
+    let accent = adw::StyleManager::default().accent_color_rgba();
+    let couleur = format!(
+        "rgb({}, {}, {})",
+        (accent.red() * 255.0).round() as u8,
+        (accent.green() * 255.0).round() as u8,
+        (accent.blue() * 255.0).round() as u8
+    );
+    STYLE.replace("@ACCENT@", &couleur)
 }
 
 fn construire(application: &adw::Application) {
@@ -83,8 +109,11 @@ fn construire(application: &adw::Application) {
     let demandes = Arc::new(Demandes::default());
     let tray = Rc::new(crate::tray::setup(demandes.clone()));
 
+    // `Never` en horizontal force la fenêtre à rester aussi large que son
+    // contenu : c'est ce qui empêchait de la rétrécir. En `Automatic`, une
+    // barre apparaît au pire, et le FlowBox replie les cartes avant cela.
     let defilement = ScrolledWindow::builder()
-        .hscrollbar_policy(PolicyType::Never)
+        .hscrollbar_policy(PolicyType::Automatic)
         .vexpand(true)
         .child(&tableau.grille)
         .build();
@@ -99,6 +128,10 @@ fn construire(application: &adw::Application) {
         .title("MonDashboard")
         .default_width(1080)
         .default_height(760)
+        // Taille plancher volontairement basse : une seule colonne de cartes
+        // reste lisible, par exemple à côté d'un jeu ou d'un éditeur.
+        .width_request(360)
+        .height_request(320)
         .content(&vue)
         .build();
 

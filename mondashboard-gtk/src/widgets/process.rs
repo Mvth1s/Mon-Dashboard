@@ -47,6 +47,8 @@ impl ProcessWidget {
                         Align::End
                     })
                     .hexpand(colonne == 0)
+                    .max_width_chars(if colonne == 0 { NOM_MAX as i32 } else { 10 })
+                    .ellipsize(gtk4::pango::EllipsizeMode::End)
                     .build();
                 grille.attach(&label, colonne as i32, rang as i32 + 1, 1, 1);
                 label

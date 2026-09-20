@@ -66,6 +66,12 @@ impl DrmCard {
         sysfs::read_u64(self.hwmon()?.join("freq1_input")).map(|hz| hz / 1_000_000)
     }
 
+    /// Puissance instantanée, publiée en microwatts par hwmon.
+    pub fn power_watts(&self) -> Option<f32> {
+        sysfs::read_u64(self.hwmon()?.join("power1_average"))
+            .map(|microwatts| microwatts as f32 / 1_000_000.0)
+    }
+
     pub fn usage_percent(&self) -> Option<f32> {
         sysfs::read_u64(self.device.join("gpu_busy_percent")).map(|busy| busy as f32)
     }

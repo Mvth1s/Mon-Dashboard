@@ -18,6 +18,7 @@ pub(super) fn detect() -> Vec<GpuStats> {
             shared_memory_mb: card.shared_memory_bytes().map(|bytes| bytes / MB),
             temperature_celsius: card.temperature_celsius(),
             frequency_mhz: card.frequency_mhz(),
+            power_watts: card.power_watts(),
         })
         .collect()
 }

@@ -12,6 +12,8 @@ pub struct CpuStats {
     pub frequency_mhz: u64,
     pub frequency_max_mhz: u64,
     pub temperature_celsius: Option<f32>,
+    /// Charge moyenne sur 1, 5 et 15 minutes (/proc/loadavg).
+    pub load_average: [f64; 3],
 }
 
 /// Contrôleurs hwmon exposant la température CPU, par ordre de préférence.
@@ -46,6 +48,10 @@ pub fn get_cpu_stats(sys: &System) -> CpuStats {
         frequency_mhz,
         frequency_max_mhz: max_frequency_mhz(),
         temperature_celsius: temperature(),
+        load_average: {
+            let charge = System::load_average();
+            [charge.one, charge.five, charge.fifteen]
+        },
     }
 }
 

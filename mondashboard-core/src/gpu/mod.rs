@@ -27,6 +27,8 @@ pub struct GpuStats {
     pub shared_memory_mb: Option<u64>,
     pub temperature_celsius: Option<f32>,
     pub frequency_mhz: Option<u64>,
+    /// Puissance consommée en watts, si le pilote la publie.
+    pub power_watts: Option<f32>,
 }
 
 #[derive(Debug, Clone, Default)]

@@ -5,7 +5,7 @@ use gtk4::{Align, Box as GtkBox, Label, Orientation};
 use mondashboard_core::network::NetworkStats;
 
 use super::graph::{Echelle, Graph};
-use super::{ABSENT, carte, format_debit, ligne};
+use super::{ABSENT, carte, format_debit, format_octets, ligne};
 
 struct LigneInterface {
     nom: Label,
@@ -18,6 +18,7 @@ pub struct NetworkWidget {
     interfaces: GtkBox,
     lignes: RefCell<Vec<LigneInterface>>,
     ping: Label,
+    cumul: Label,
     graph: Graph,
 }
 
@@ -36,12 +37,16 @@ impl NetworkWidget {
 
         let (ligne_ping, ping) = ligne("Ping");
         contenu.append(&ligne_ping);
+        let (ligne_cumul, cumul) = ligne("Cumul");
+        ligne_cumul.set_tooltip_text(Some("Volume échangé depuis le démarrage de la machine"));
+        contenu.append(&ligne_cumul);
 
         Self {
             container,
             interfaces,
             lignes: RefCell::new(Vec::new()),
             ping,
+            cumul,
             graph,
         }
     }
@@ -77,6 +82,21 @@ impl NetworkWidget {
             .map(|interface| interface.rx_bytes_per_sec)
             .unwrap_or(0);
         self.graph.push(debit_actif as f32);
+
+        // Cumul de l'interface active : celui de docker0 ou d'un lien
+        // débranché n'apprendrait rien.
+        match data
+            .interfaces
+            .iter()
+            .find(|interface| data.active_interface.as_deref() == Some(interface.name.as_str()))
+        {
+            Some(active) => self.cumul.set_label(&format!(
+                "↓ {}   ↑ {}",
+                format_octets(active.rx_total_bytes),
+                format_octets(active.tx_total_bytes)
+            )),
+            None => self.cumul.set_label(ABSENT),
+        }
 
         self.ping.set_label(
             &data
