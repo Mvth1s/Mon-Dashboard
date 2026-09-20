@@ -8,7 +8,7 @@ pub mod memory;
 pub mod network;
 pub mod process;
 
-use gtk4::prelude::*;
+use adw::prelude::*;
 use gtk4::{Align, Box as GtkBox, Label, Orientation, ProgressBar};
 
 /// Seuils d'affichage, fixes et non configurables : ils servent à lire l'état
@@ -67,21 +67,58 @@ pub fn carte(titre: &str) -> (GtkBox, GtkBox) {
     (carte, contenu)
 }
 
-/// Ligne « intitulé … valeur », alignée sur toute la largeur.
+/// Ligne « intitulé  valeur ».
+///
+/// L'intitulé occupe une largeur fixe en caractères, ce qui aligne les valeurs
+/// en colonne sans les projeter à l'autre bout de la carte : sur une carte
+/// large, une valeur collée à droite se lit mal, trop loin de son libellé.
 pub fn ligne(intitule: &str) -> (GtkBox, Label) {
     let ligne = GtkBox::builder()
         .orientation(Orientation::Horizontal)
+        .spacing(10)
         .build();
     let gauche = Label::builder()
         .label(intitule)
         .halign(Align::Start)
-        .hexpand(true)
+        .xalign(0.0)
+        .width_chars(13)
+        .max_width_chars(13)
         .css_classes(["secondaire"])
         .build();
-    let valeur = Label::builder().label(ABSENT).halign(Align::End).build();
+    let valeur = Label::builder()
+        .label(ABSENT)
+        .halign(Align::Start)
+        .xalign(0.0)
+        .hexpand(true)
+        .ellipsize(gtk4::pango::EllipsizeMode::End)
+        .build();
     ligne.append(&gauche);
     ligne.append(&valeur);
     (ligne, valeur)
+}
+
+/// Couleur d'accentuation du système, lue via libadwaita (portail XDG sous
+/// KDE, réglage GNOME sinon). Elle remplace le vert pour les charges
+/// normales, afin que l'application s'accorde au bureau.
+pub fn couleur_accent() -> (f64, f64, f64) {
+    let accent = adw::StyleManager::default().accent_color_rgba();
+    (
+        accent.red() as f64,
+        accent.green() as f64,
+        accent.blue() as f64,
+    )
+}
+
+/// Sous-titre pouvant être long (modèle de processeur, de carte graphique) :
+/// il est tronqué pour ne pas imposer sa largeur à toute la fenêtre.
+pub fn sous_titre() -> Label {
+    Label::builder()
+        .halign(Align::Start)
+        .xalign(0.0)
+        .max_width_chars(26)
+        .ellipsize(gtk4::pango::EllipsizeMode::End)
+        .css_classes(["secondaire"])
+        .build()
 }
 
 pub fn barre() -> ProgressBar {
@@ -97,6 +134,17 @@ pub fn format_debit(octets_par_sec: u64) -> String {
         format!("{:.0} ko/s", octets / 1024.0)
     } else {
         format!("{octets_par_sec} o/s")
+    }
+}
+
+/// Volume total (et non un débit) : Go au-delà du gigaoctet, Mo sinon.
+pub fn format_octets(octets: u64) -> String {
+    const GO: f64 = 1024.0 * 1024.0 * 1024.0;
+    let valeur = octets as f64;
+    if valeur >= GO {
+        format!("{:.1} Go", valeur / GO)
+    } else {
+        format!("{:.0} Mo", valeur / (1024.0 * 1024.0))
     }
 }
 

@@ -50,6 +50,11 @@ pub(super) fn detect() -> Vec<GpuStats> {
                     .ok()
                     .map(|celsius| celsius as f32),
                 frequency_mhz: device.clock_info(Clock::Graphics).ok().map(u64::from),
+                // NVML publie la puissance en milliwatts.
+                power_watts: device
+                    .power_usage()
+                    .ok()
+                    .map(|milliwatts| milliwatts as f32 / 1000.0),
             })
         })
         .collect()

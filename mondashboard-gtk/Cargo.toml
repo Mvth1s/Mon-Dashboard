@@ -10,7 +10,7 @@ path = "src/main.rs"
 [dependencies]
 mondashboard-core = { path = "../mondashboard-core" }
 gtk4 = { version = "0.9", features = ["v4_14"] }
-adw = { package = "libadwaita", version = "0.7", features = ["v1_5"] }
+adw = { package = "libadwaita", version = "0.7", features = ["v1_6"] }
 sysinfo = "0.33"
 serde_json = "1"
 glib = "0.20"

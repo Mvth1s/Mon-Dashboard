@@ -1,7 +1,6 @@
 //! Disposition fixe du tableau de bord (v0.1 : pas de glisser-déposer).
 
-use gtk4::prelude::*;
-use gtk4::{Grid, Orientation};
+use gtk4::{Align, FlowBox, Orientation, SelectionMode};
 
 use crate::widgets::battery::BatteryWidget;
 use crate::widgets::cpu::CpuWidget;
@@ -12,9 +11,13 @@ use crate::widgets::memory::MemoryWidget;
 use crate::widgets::network::NetworkWidget;
 use crate::widgets::process::ProcessWidget;
 
-/// Tous les widgets, placés une fois pour toutes.
+/// Nombre maximal de cartes par ligne. Au-delà, elles deviendraient trop
+/// étroites pour leurs graphes.
+const CARTES_PAR_LIGNE: u32 = 3;
+
+/// Tous les widgets, répartis selon la largeur disponible.
 pub struct Tableau {
-    pub grille: Grid,
+    pub grille: FlowBox,
     pub cpu: CpuWidget,
     pub gpu: GpuWidget,
     pub memoire: MemoryWidget,
@@ -27,14 +30,24 @@ pub struct Tableau {
 
 impl Tableau {
     pub fn new() -> Self {
-        let grille = Grid::builder()
+        // Une grille à colonnes fixes impose sa largeur minimale à la
+        // fenêtre, qui devient alors impossible à rétrécir. Le FlowBox, lui,
+        // replie les cartes en une seule colonne quand la place manque.
+        let grille = FlowBox::builder()
+            .orientation(Orientation::Horizontal)
+            .selection_mode(SelectionMode::None)
+            .min_children_per_line(1)
+            .max_children_per_line(CARTES_PAR_LIGNE)
+            .homogeneous(true)
             .row_spacing(14)
             .column_spacing(14)
             .margin_top(14)
             .margin_bottom(14)
             .margin_start(14)
             .margin_end(14)
-            .column_homogeneous(true)
+            // Les cartes se rangent en haut : le reste de la hauteur revient
+            // au défilement, pas à des cartes étirées.
+            .valign(Align::Start)
             .build();
 
         let cpu = CpuWidget::new();
@@ -46,21 +59,20 @@ impl Tableau {
         let batterie = BatteryWidget::new();
         let refroidissement = FansWidget::new();
 
-        // Deux colonnes : le matériel principal à gauche, le reste à droite.
-        // Les cartes sans matériel se masquent d'elles-mêmes et la grille se
-        // referme autour.
-        grille.attach(&cpu.container, 0, 0, 1, 1);
-        grille.attach(&gpu.container, 1, 0, 1, 1);
-        grille.attach(&memoire.container, 0, 1, 1, 1);
-        grille.attach(&reseau.container, 1, 1, 1, 1);
-        grille.attach(&stockage.container, 0, 2, 1, 1);
-        grille.attach(&processus.container, 1, 2, 1, 1);
-        grille.attach(&batterie.container, 0, 3, 1, 1);
-        grille.attach(&refroidissement.container, 1, 3, 1, 1);
-
-        // Sous une fenêtre étroite, la grille passerait à l'étroit : on laisse
-        // le défilement vertical s'en charger.
-        grille.set_orientation(Orientation::Horizontal);
+        // Ordre d'importance : les cartes masquées faute de matériel ne
+        // laissent pas de trou, le FlowBox referme la disposition.
+        for carte in [
+            &cpu.container,
+            &gpu.container,
+            &memoire.container,
+            &reseau.container,
+            &stockage.container,
+            &processus.container,
+            &batterie.container,
+            &refroidissement.container,
+        ] {
+            grille.append(carte);
+        }
 
         Self {
             grille,

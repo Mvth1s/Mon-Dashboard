@@ -4,9 +4,10 @@ use gtk4::prelude::*;
 use gtk4::{Align, Box as GtkBox, Label, Orientation, ProgressBar};
 use mondashboard_core::gpu::{AllGpuStats, GpuStats, GpuVendor};
 
+use super::graph::{Echelle, Graph};
 use super::{
     ABSENT, appliquer_niveau, barre, carte, format_mo, format_pourcentage, format_temperature,
-    ligne, ratio,
+    ligne, ratio, sous_titre,
 };
 
 struct LigneGpu {
@@ -18,6 +19,8 @@ struct LigneGpu {
     barre_memoire: ProgressBar,
     temperature: Label,
     frequence: Label,
+    puissance: Label,
+    graph: Graph,
 }
 
 pub struct GpuWidget {
@@ -80,11 +83,7 @@ fn construire_ligne() -> LigneGpu {
         .spacing(6)
         .build();
 
-    let modele = Label::builder()
-        .halign(Align::Start)
-        .wrap(true)
-        .css_classes(["secondaire"])
-        .build();
+    let modele = sous_titre();
     racine.append(&modele);
 
     let charge = Label::builder()
@@ -95,6 +94,9 @@ fn construire_ligne() -> LigneGpu {
 
     let barre_charge = barre();
     racine.append(&barre_charge);
+
+    let graph = Graph::new(Echelle::Pourcentage);
+    racine.append(&graph.area);
 
     let (ligne_memoire, memoire) = ligne("Mémoire");
     racine.append(&ligne_memoire);
@@ -107,6 +109,8 @@ fn construire_ligne() -> LigneGpu {
     racine.append(&ligne_temperature);
     let (ligne_frequence, frequence) = ligne("Fréquence");
     racine.append(&ligne_frequence);
+    let (ligne_puissance, puissance) = ligne("Consommation");
+    racine.append(&ligne_puissance);
 
     LigneGpu {
         racine,
@@ -117,6 +121,8 @@ fn construire_ligne() -> LigneGpu {
         barre_memoire,
         temperature,
         frequence,
+        puissance,
+        graph,
     }
 }
 
@@ -144,6 +150,9 @@ fn maj_ligne(ligne: &LigneGpu, data: &GpuStats) {
             ligne.barre.set_visible(false);
         }
     }
+    // Le graphe suit la charge ; sans mesure disponible, il reste à plat
+    // plutôt que de disparaître et de faire sauter la carte.
+    ligne.graph.push(data.usage_percent.unwrap_or(0.0));
 
     match (data.vram_used_mb, data.vram_total_mb) {
         (Some(utilisee), Some(totale)) => {
@@ -172,6 +181,12 @@ fn maj_ligne(ligne: &LigneGpu, data: &GpuStats) {
     ligne
         .temperature
         .set_label(&format_temperature(data.temperature_celsius));
+    ligne.puissance.set_label(
+        &data
+            .power_watts
+            .map(|watts| format!("{watts:.0} W"))
+            .unwrap_or_else(|| ABSENT.to_string()),
+    );
     ligne.frequence.set_label(
         &data
             .frequency_mhz
