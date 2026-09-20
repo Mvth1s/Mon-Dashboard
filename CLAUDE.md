@@ -44,8 +44,11 @@ cargo test --workspace
 Rust **edition 2024** — requires a recent stable toolchain (developed on 1.95; the
 `if let … && let …` chains in `layout/persistence.rs` need 1.88+).
 
-**System dependencies:** GTK4 + libadwaita (`libgtk-4-dev`, `libadwaita-1-dev`).
-`lm-sensors` and `smartmontools` are optional — their absence degrades gracefully.
+**System dependencies:** GTK4 + **libadwaita 1.6 or newer** (`libgtk-4-dev`,
+`libadwaita-1-dev`). 1.6 is required for `StyleManager::accent_color_rgba()`; Ubuntu 24.04
+ships 1.5, which is why CI builds inside a `fedora:latest` container rather than on the
+Ubuntu runner image. `lm-sensors` and `smartmontools` are optional — their absence degrades
+gracefully.
 
 ## The rule that shapes this codebase: detect, never assume
 
@@ -142,6 +145,13 @@ A widget whose hardware is absent calls `container.set_visible(false)`; the grid
 around it. Rows whose count is only known at runtime (GPUs, disks, interfaces, fans) are
 rebuilt only when that count changes, never on every tick.
 
+The dashboard is a `GtkFlowBox` (`layout/grid.rs`), not a fixed grid: a grid forces its
+minimum width onto the window, which then cannot be shrunk. Because the FlowBox is
+homogeneous, **the widest card decides how many columns fit** — that is why long labels are
+ellipsized (`sous_titre()`, the process name) and why Adwaita's 150 px minimum width on
+progress bars is overridden in CSS. Three cards fit around 1200 px, two around 800 px, one
+below that.
+
 `graph.rs` is the Cairo graph: a 60-value circular buffer that fills right to left, fixed
 0–100 % or auto-scaled. At the 2 s tick, 60 points is two minutes of history (SPEC.md says
 "60 s" because it was written against a 1 s tick).
@@ -163,7 +173,7 @@ Build ONLY what is listed. The ❌ items that already have stub files
 ✅ All 8 widgets (CPU, GPU, RAM, Network, Disk, Process, Battery, Fans)
 ✅ Tray icon, left-click show/hide and a menu to quit
 ✅ Auto dark/light theme via libadwaita
-✅ Fixed 2-column layout (no drag & drop)
+✅ Adaptive layout, 1 to 3 cards per row depending on window width (no drag & drop)
 ✅ Fixed 2 s refresh (`AppConfig::refresh_interval_secs` = 2; SPEC.md §4.2 says 1 s — 2 s wins)
 
 ❌ Drag & drop, multiple layouts · Mini overlay · Notifications & alerts · Settings window · Kill process
@@ -200,8 +210,10 @@ you touch a collector, they are invisible in a native run:
 The HTML mockup is `MonDashboard _standalone_.html` at the repo root (note the spaces).
 Logos and icons are flat in `assets/` (there is no `assets/icons/`).
 
-Fixed metric colors, never user-configurable and distinct from alert thresholds:
-green < 60 %, orange 60–85 %, red > 85 %.
+Metric colors, distinct from alert thresholds. Orange (60–85 %) and red (> 85 %) are
+fixed — they signal a problem and must stay recognizable. Below 60 %, the desktop's own
+accent color is used instead of green, so the app matches the user's theme; `@ACCENT@` in
+`app.rs`'s stylesheet is substituted at startup and again on `notify::accent-color`.
 
 ## Data sources per module
 
@@ -223,3 +235,17 @@ AMD GPU data comes from sysfs on purpose — no `rocm-smi` dependency for users.
 `.claude/agents/` holds three project agents: `collecteur-systeme` (collectors),
 `widget-gtk` (UI), and `revue-materiel`, a pre-merge reviewer that hunts hardware
 assumptions, panics and anything blocking the GTK loop.
+
+## Debugging the running app — two traps that cost hours
+
+- **The compositor remembers the window size.** KWin reopens the window at whatever size
+  the user last dragged it to, keyed by application id, and `default_width` is then
+  ignored. A layout that looks broken ("only one column!") may just be a narrow remembered
+  window. To test sizing honestly, temporarily change `ID_APPLICATION` — a class the
+  compositor has never seen gets the requested size.
+- **An installed Flatpak hijacks native launches.** Both builds claim the same D-Bus name,
+  so running `./target/debug/mondashboard` can silently activate the *installed Flatpak*
+  instead, showing stale code. The tell is sandbox-only text (the process widget's
+  message). Run `flatpak uninstall --user io.github.Mvth1s.MonDashboard` while iterating
+  natively. Also note `pkill -f mondashboard` matches the shell command itself and kills
+  the caller — use `pkill -x mondashboard`.
